@@ -6,6 +6,10 @@ declare module 'react-native' {
   export const Platform: Platform;
 }
 
+declare module 'react-native/Libraries/Image/resolveAssetSource' {
+  export function setCustomSourceTransformer(transformer: (resolver: any) => any): void;
+}
+
 declare module 'react-native-fs' {
   export const DocumentDirectoryPath: string;
   export function exists(path: string): Promise<boolean>;
@@ -15,6 +19,7 @@ declare module 'react-native-fs' {
   export function hash(path: string, algorithm: string): Promise<string>;
   export function stat(path: string): Promise<any>;
   export function writeFile(path: string, content: string, encoding?: string): Promise<void>;
+  export function readFile(path: string, encoding?: string): Promise<string>;
   export function downloadFile(config: any): { promise: Promise<any> };
   export function getFSInfo(): Promise<any>;
 }

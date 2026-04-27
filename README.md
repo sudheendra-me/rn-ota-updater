@@ -9,6 +9,7 @@ A React Native library for implementing Over-The-Air (OTA) updates with custom u
 - 📱 **Android Support**: Currently supports Android platform
 - 🔄 **Atomic Updates**: Rollback capability with backup system
 - 🛡️ **Error Recovery**: Automatic recovery from failed updates
+- 🎨 **Assets Mapping**: Automatic asset resolution for updated images and static files
 - 📦 **Peer Dependencies**: No bundled native modules - you control the versions
 
 ## Installation
@@ -89,6 +90,26 @@ import { recoverIfNeeded } from 'rn-ota-updater';
 await recoverIfNeeded(); // Call this early in your app initialization
 ```
 
+### Assets Mapping
+
+For updates that include image assets or other static files, you can enable asset mapping to serve updated assets from the OTA directory:
+
+```typescript
+import { loadOtaAssetsMap, recoverIfNeeded } from 'rn-ota-updater';
+
+// Initialize recovery first
+await recoverIfNeeded();
+
+// Then load assets mapping
+await loadOtaAssetsMap();
+```
+
+This will automatically intercept asset resolution and serve updated assets when available. The assets mapping supports:
+
+- **Metro-bundled assets** (`rn/filename.ext`)
+- **Android drawables** (`drawable*/filename.ext`)
+- **Android mipmaps** (`mipmap*/filename.ext`)
+
 ## API Reference
 
 ### `runOTA(bundle: OTABundle): Promise<OTAResult>`
@@ -104,6 +125,20 @@ Applies an OTA update.
 ### `recoverIfNeeded(): Promise<void>`
 
 Recovers from a failed update if needed. Should be called on app startup.
+
+### `loadOtaAssetsMap(): Promise<void>`
+
+Loads the OTA assets map and sets up asset interception for images and other static assets. This allows serving updated assets from the OTA directory instead of bundled assets.
+
+**Call this after `recoverIfNeeded()` and before using any assets in your app.**
+
+### `clearOtaAssetsMap(): void`
+
+Clears the loaded assets map and resets asset interception. Useful for testing or switching between OTA versions.
+
+### `getOtaAssetsMap(): Record<string, any>`
+
+Returns the current assets mapping object for debugging purposes.
 
 ### Types
 
@@ -140,7 +175,9 @@ DocumentDirectory/
 ├── ota/
 │   ├── current/          # Active bundle
 │   │   ├── index.android.bundle
-│   │   └── hash.txt
+│   │   ├── hash.txt
+│   │   └── assets.json   # Assets mapping (if included in update)
+│   ├── assets/           # Updated assets directory
 │   ├── staging/          # Downloaded update (temporary)
 │   ├── backup/           # Previous version (for rollback)
 │   ├── update.zip        # Downloaded ZIP (temporary)

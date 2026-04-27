@@ -23,7 +23,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sudheendra-me/rn-ota-updater.git"
+    "url": "git+https://github.com/sudheendra-me/rn-ota-updater.git"
   },
   "homepage": "https://github.com/sudheendra-me/rn-ota-updater#readme",
   "engines": {
