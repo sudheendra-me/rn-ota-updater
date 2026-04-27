@@ -1,6 +1,6 @@
 {
   "name": "rn-ota-updater",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "React Native OTA updater with atomic updates, rollback, and integrity validation",
   "keywords": [
     "react-native",
@@ -11,37 +11,29 @@
   ],
   "license": "MIT",
   "author": "Sudheendra",
-
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-
   "files": [
     "dist"
   ],
-
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build"
   },
-
   "repository": {
     "type": "git",
     "url": "https://github.com/sudheendra-me/rn-ota-updater.git"
   },
-
   "homepage": "https://github.com/sudheendra-me/rn-ota-updater#readme",
-
   "engines": {
     "node": ">=16"
   },
-
   "peerDependencies": {
     "react-native": ">=0.70",
     "react-native-fs": ">=2.20.0",
     "react-native-zip-archive": ">=6.0.0"
   },
-
   "peerDependenciesMeta": {
     "react-native-fs": {
       "optional": false
@@ -50,7 +42,6 @@
       "optional": false
     }
   },
-
   "devDependencies": {
     "typescript": "^6.0.3"
   }
