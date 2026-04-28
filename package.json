@@ -15,14 +15,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "src/build-ota.js"
   ],
+  "bin": {
+    "rn-ota-build-file": "src/build-ota.js"
+  },
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build"
-  },
-  "bin": {
-    "rn-ota-build-file": "./dist/build-ota.js"
   },
   "repository": {
     "type": "git",
