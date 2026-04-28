@@ -19,8 +19,10 @@
   ],
   "scripts": {
     "build": "tsc",
-    "build:ota": "node build-ota.js",
     "prepare": "npm run build"
+  },
+  "bin": {
+    "rn-ota": "./dist/build-ota.js"
   },
   "repository": {
     "type": "git",

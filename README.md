@@ -117,7 +117,7 @@ A helper script is included to generate an OTA ZIP bundle with bundled RN assets
 Run the script with:
 
 ```bash
-npm run build:ota
+npx rn-ota
 ```
 
 This creates `otaBundle.zip` in the repository root and prints both:
