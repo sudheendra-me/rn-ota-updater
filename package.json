@@ -1,6 +1,6 @@
 {
   "name": "rn-ota-updater",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "React Native OTA updater with atomic updates, rollback, and integrity validation",
   "keywords": [
     "react-native",
