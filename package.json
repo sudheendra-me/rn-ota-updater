@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "build:ota": "node build-ota.js",
     "prepare": "npm run build"
   },
   "repository": {

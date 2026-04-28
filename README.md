@@ -110,6 +110,47 @@ This will automatically intercept asset resolution and serve updated assets when
 - **Android drawables** (`drawable*/filename.ext`)
 - **Android mipmaps** (`mipmap*/filename.ext`)
 
+## OTA Build Script
+
+A helper script is included to generate an OTA ZIP bundle with bundled RN assets and an `assets.json` mapping.
+
+Run the script with:
+
+```bash
+npm run build:ota
+```
+
+This creates `otaBundle.zip` in the repository root and prints both:
+
+- `bundleHash` — SHA256 of the generated JS bundle
+- `zipHash` — SHA256 of the final ZIP bundle
+
+## Version Checking
+
+To prevent reapplying the same OTA version, you can check a local version file before processing an update. Example:
+
+```typescript
+import RNFS from 'react-native-fs';
+
+const VERSION_FILE = `${RNFS.DocumentDirectoryPath}/ota/version.txt`;
+
+const newVersion = '1';
+let lastVersion = null;
+const exists = await RNFS.exists(VERSION_FILE);
+if (exists) {
+  lastVersion = await RNFS.readFile(VERSION_FILE, 'utf8');
+}
+
+console.log('[OTA] lastVersion:', lastVersion);
+
+if (lastVersion === newVersion) {
+  console.log('[OTA] Already up to date');
+  return;
+}
+```
+
+This ensures the update only runs when the stored OTA version differs from the incoming version.
+
 ## API Reference
 
 ### `runOTA(bundle: OTABundle): Promise<OTAResult>`
