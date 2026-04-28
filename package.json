@@ -22,7 +22,7 @@
     "prepare": "npm run build"
   },
   "bin": {
-    "rn-ota": "./dist/build-ota.js"
+    "rn-ota-build-file": "./dist/build-ota.js"
   },
   "repository": {
     "type": "git",
