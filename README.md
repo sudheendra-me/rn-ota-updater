@@ -120,6 +120,31 @@ Run the script with:
 npx rn-ota-build-file
 ```
 
+### CLI Options
+
+The build script supports custom paths for your project structure:
+
+```bash
+npx rn-ota-build-file [options]
+```
+
+**Options:**
+- `--rn-assets <path>` - Path to React Native assets (default: `src/assets/images`)
+- `--android-res <path>` - Path to Android resources (default: `android/app/src/main/res`)
+- `--help, -h` - Show help message
+
+**Examples:**
+```bash
+# Use default paths
+npx rn-ota-build-file
+
+# Custom RN assets location
+npx rn-ota-build-file --rn-assets assets/images
+
+# Custom Android resources and RN assets
+npx rn-ota-build-file --android-res android/app/src/main/res --rn-assets src/assets
+```
+
 This creates `otaBundle.zip` in the repository root and prints both:
 
 - `bundleHash` — SHA256 of the generated JS bundle

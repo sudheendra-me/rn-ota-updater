@@ -1,19 +1,57 @@
 #!/usr/bin/env node
 
 console.log("OTA CLI running...");
+
+// ===== CLI ARGS =====
+const args = process.argv.slice(2);
+let rnAssetsSrc = 'src/assets/images'; // default
+let androidResDir = 'android/app/src/main/res'; // default
+
+// Parse arguments
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--rn-assets' && args[i + 1]) {
+    rnAssetsSrc = args[i + 1];
+    i++; // skip next arg
+  } else if (args[i] === '--android-res' && args[i + 1]) {
+    androidResDir = args[i + 1];
+    i++; // skip next arg
+  } else if (args[i] === '--help' || args[i] === '-h') {
+    console.log(`
+OTA Build Tool
+
+Usage: npx rn-ota-build-file [options]
+
+Options:
+  --rn-assets <path>     Path to React Native assets (default: src/assets/images)
+  --android-res <path>   Path to Android resources (default: android/app/src/main/res)
+  --help, -h            Show this help message
+
+Examples:
+  npx rn-ota-build-file
+  npx rn-ota-build-file --rn-assets assets/images
+  npx rn-ota-build-file --android-res android/app/src/main/res --rn-assets src/assets
+`);
+    process.exit(0);
+  }
+}
+
+console.log(`Using RN assets path: ${rnAssetsSrc}`);
+console.log(`Using Android res path: ${androidResDir}`);
+console.log('');
+
 const fs = require('fs');
 const path = require('path');
 const {execSync} = require('child_process');
 const crypto = require('crypto');
 
 // ===== CONFIG =====
-const BUILD_DIR = path.join(__dirname, 'ota_build');
+const BUILD_DIR = path.join(process.cwd(), 'ota_build');
 const ASSETS_DIR = path.join(BUILD_DIR, 'assets');
 const RN_OTA_DIR = path.join(ASSETS_DIR, 'rn');
-const ZIP_PATH = path.join(__dirname, 'otaBundle.zip');
+const ZIP_PATH = path.join(process.cwd(), 'otaBundle.zip');
 
-const ANDROID_RES_DIR = path.join(__dirname, 'android/app/src/main/res');
-const RN_ASSETS_SRC = path.join(__dirname, 'src/assets/images');
+const ANDROID_RES_DIR = path.join(process.cwd(), androidResDir);
+const RN_ASSETS_SRC = path.join(process.cwd(), rnAssetsSrc);
 
 const VALID_EXTENSIONS = [
   '.png',
