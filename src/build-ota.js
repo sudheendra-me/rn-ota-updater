@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+
+console.log("OTA CLI running...");
 const fs = require('fs');
 const path = require('path');
 const {execSync} = require('child_process');
