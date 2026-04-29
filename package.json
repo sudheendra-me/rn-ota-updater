@@ -16,8 +16,16 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "android",
     "src/build-ota.js"
   ],
+  "react-native": {
+    "android": {
+      "sourceDir": "./android",
+      "packageImportPath": "import com.rnotaupdater.OTARestartPackage;",
+      "packageInstance": "new OTARestartPackage()"
+    }
+  },
   "bin": {
     "rn-ota-build-file": "src/build-ota.js"
   },

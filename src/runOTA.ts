@@ -7,7 +7,7 @@ export const runOTA = async (bundle: OTABundle): Promise<RunOTAResult> => {
 
   if (res.onSuccess) {
     if (bundle.autoReload) {
-      reloadApp();
+      reloadApp(bundle.restartPackageName);
     }
 
     return {updated: true, reloadRequired: true};

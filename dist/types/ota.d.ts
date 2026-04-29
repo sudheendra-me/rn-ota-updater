@@ -6,6 +6,7 @@ export type OTABundle = {
     sizeBytes?: number;
     signature?: string;
     autoReload?: boolean;
+    restartPackageName?: string;
 };
 export type OTAResult = {
     onSuccess: boolean;

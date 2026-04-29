@@ -230,68 +230,23 @@ await runOTA({
 });
 ```
 
+By default, Android restarts the current app package automatically. If you need to restart a specific package, pass `restartPackageName`:
+
+```typescript
+await runOTA({
+  ...updateBundle,
+  autoReload: true,
+  restartPackageName: "com.yourcompany.yourapp",
+});
+```
+
 Use this only when it is safe to restart the app immediately. For payment, form, or other critical flows, prefer checking `result.reloadRequired` and calling `OTARestart.restartApp()` yourself.
 
 ### Android OTA Restart Module
 
-If you want a production-safe app restart after a successful OTA update, add a native module like this to your Android app:
+The native Android `OTARestart` module is included in this package and is autolinked by React Native. Apps do not need to add their own `NativeModules.OTARestart` implementation.
 
-```kotlin
-package com.nimblemsme
-
-import android.content.Intent
-import android.util.Log
-import com.facebook.react.ReactApplication
-import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.ReactContextBaseJavaModule
-import com.facebook.react.bridge.ReactMethod
-import com.facebook.react.bridge.ReactInstanceManager
-
-class OTARestartModule(
-    private val reactContext: ReactApplicationContext
-) : ReactContextBaseJavaModule(reactContext) {
-
-    override fun getName(): String = "OTARestart"
-
-    @ReactMethod
-    fun restartApp() {
-        val activity = currentActivity ?: run {
-            Log.e("OTARestart", "No current activity found")
-            return
-        }
-
-        val application = activity.application
-
-        if (application !is ReactApplication) {
-            Log.e("OTARestart", "Application is not a ReactApplication")
-            return
-        }
-
-        val reactNativeHost = application.reactNativeHost
-
-        activity.runOnUiThread {
-            try {
-                val instanceManager: ReactInstanceManager = reactNativeHost.reactInstanceManager
-                instanceManager.onHostDestroy(activity)
-                reactNativeHost.clear()
-
-                val intent = activity.packageManager
-                    .getLaunchIntentForPackage(activity.packageName)
-                    ?.apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    }
-
-                activity.startActivity(intent)
-                activity.finish()
-                android.os.Process.killProcess(android.os.Process.myPid())
-
-            } catch (e: Exception) {
-                Log.e("OTARestart", "Restart failed: ${e.message}")
-            }
-        }
-    }
-}
-```
+If autolinking is disabled in your app, manually add `new OTARestartPackage()` from `com.rnotaupdater` to your Android package list.
 
 ### Recovery
 
@@ -405,11 +360,11 @@ Applies an OTA update.
 
 - `Promise<RunOTAResult>`: Result object with update/reload status and error information
 
-### `reloadApp(): void`
+### `reloadApp(packageName?: string): void`
 
-Reloads the app after an OTA update. In development this uses React Native `DevSettings.reload()`. In production Android this calls the native `OTARestart.restartApp()` module when available.
+Reloads the app after an OTA update. In development this uses React Native `DevSettings.reload()`. In production Android this calls the native `OTARestart.restartApp()` module included in this package. When `packageName` is omitted, Android restarts the current app package.
 
-### `OTARestart.restartApp(): void`
+### `OTARestart.restartApp(packageName?: string): void`
 
 Package-level alias for `reloadApp()`, so app code does not need to access `NativeModules.OTARestart` directly.
 
@@ -442,6 +397,7 @@ interface OTABundle {
   sizeBytes?: number; // Size of the update in bytes
   signature?: string; // Optional signature metadata
   autoReload?: boolean; // Reload automatically after a successful update
+  restartPackageName?: string; // Optional package name override for Android restart
 }
 
 interface OTAResult {
