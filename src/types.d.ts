@@ -1,9 +1,15 @@
 // Type stubs for peer dependencies that won't be available during development
+declare const __DEV__: boolean;
+
 declare module 'react-native' {
   export interface Platform {
     OS: 'ios' | 'android' | 'windows' | 'macos' | 'web';
   }
   export const Platform: Platform;
+  export const NativeModules: Record<string, any>;
+  export const DevSettings: {
+    reload(): void;
+  };
 }
 
 declare module 'react-native/Libraries/Image/resolveAssetSource' {

@@ -14,9 +14,12 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOtaAssetsMap = exports.clearOtaAssetsMap = exports.loadOtaAssetsMap = exports.recoverIfNeeded = exports.cleanupOTA = exports.applyOTABundle = exports.runOTA = void 0;
+exports.getOtaAssetsMap = exports.clearOtaAssetsMap = exports.loadOtaAssetsMap = exports.recoverIfNeeded = exports.cleanupOTA = exports.applyOTABundle = exports.reloadApp = exports.OTARestart = exports.runOTA = void 0;
 var runOTA_1 = require("./runOTA");
 Object.defineProperty(exports, "runOTA", { enumerable: true, get: function () { return runOTA_1.runOTA; } });
+var reloadApp_1 = require("./reloadApp");
+Object.defineProperty(exports, "OTARestart", { enumerable: true, get: function () { return reloadApp_1.OTARestart; } });
+Object.defineProperty(exports, "reloadApp", { enumerable: true, get: function () { return reloadApp_1.reloadApp; } });
 var applyOTA_1 = require("./core/applyOTA");
 Object.defineProperty(exports, "applyOTABundle", { enumerable: true, get: function () { return applyOTA_1.applyOTABundle; } });
 Object.defineProperty(exports, "cleanupOTA", { enumerable: true, get: function () { return applyOTA_1.cleanupOTA; } });

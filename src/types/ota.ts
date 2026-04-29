@@ -5,9 +5,16 @@ export type OTABundle = {
   bundleHash?: string;
   sizeBytes?: number;
   signature?: string;
+  autoReload?: boolean;
 };
 
 export type OTAResult = {
   onSuccess: boolean;
+  error?: string;
+};
+
+export type RunOTAResult = {
+  updated: boolean;
+  reloadRequired: boolean;
   error?: string;
 };

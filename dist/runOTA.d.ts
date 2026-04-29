@@ -1,11 +1,3 @@
-import { OTABundle } from './types/ota';
-export declare const runOTA: (bundle: OTABundle) => Promise<{
-    updated: boolean;
-    reloadRequired: boolean;
-    error?: undefined;
-} | {
-    updated: boolean;
-    error: string | undefined;
-    reloadRequired?: undefined;
-}>;
+import { OTABundle, RunOTAResult } from './types/ota';
+export declare const runOTA: (bundle: OTABundle) => Promise<RunOTAResult>;
 //# sourceMappingURL=runOTA.d.ts.map

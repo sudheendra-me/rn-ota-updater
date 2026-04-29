@@ -24,11 +24,11 @@ This package uses **peer dependencies** to avoid bundling native modules. You mu
 
 ### Required Peer Dependencies
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `react-native` | `>=0.70` | React Native framework |
-| `react-native-fs` | `>=2.20.0` | File system operations |
-| `react-native-zip-archive` | `>=6.0.0` | ZIP file extraction |
+| Package                    | Version    | Purpose                |
+| -------------------------- | ---------- | ---------------------- |
+| `react-native`             | `>=0.70`   | React Native framework |
+| `react-native-fs`          | `>=2.20.0` | File system operations |
+| `react-native-zip-archive` | `>=6.0.0`  | ZIP file extraction    |
 
 ### Install Peer Dependencies
 
@@ -55,28 +55,241 @@ For Android, add these permissions to your `android/app/src/main/AndroidManifest
 <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 ```
 
+### Android MainApplication.kt Integration
+
+To enable OTA bundle loading in your React Native Android app, update your `android/app/src/main/java/com/yourcompany/MainApplication.kt`:
+
+```kotlin
+package com.yourcompany
+
+import android.app.Application
+import android.util.Log
+import com.facebook.react.PackageList
+import com.facebook.react.ReactApplication
+import com.facebook.react.ReactHost
+import com.facebook.react.ReactNativeHost
+import com.facebook.react.ReactPackage
+import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
+import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
+import com.facebook.react.defaults.DefaultReactNativeHost
+import com.facebook.react.soloader.OpenSourceMergedSoMapping
+import com.facebook.soloader.SoLoader
+import java.io.File
+import java.security.MessageDigest
+
+class MainApplication : Application(), ReactApplication {
+
+  // ===== HASH VALIDATION =====
+  private fun computeSHA256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { fis ->
+      val buffer = ByteArray(8192)
+      var bytesRead: Int
+      while (fis.read(buffer).also { bytesRead = it } != -1) {
+        digest.update(buffer, 0, bytesRead)
+      }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+  }
+
+  // ===== OTA BUNDLE RESOLUTION =====
+  private fun getOtaBundlePath(): String? {
+    val otaDir = File(filesDir, "ota")
+    val currentDir = File(otaDir, "current")
+    val backupDir = File(otaDir, "backup")
+
+    val bundleFile = File(currentDir, "index.android.bundle")
+    val hashFile = File(currentDir, "hash.txt")
+
+    // Recovery: restore from backup if current missing
+    if (!currentDir.exists() && backupDir.exists()) {
+      Log.w("OTA", "Recovering from backup...")
+      backupDir.renameTo(currentDir)
+    }
+
+    // No valid OTA bundle
+    if (!bundleFile.exists() || !hashFile.exists()) {
+      Log.d("OTA", "No OTA bundle found → using default")
+      return null
+    }
+
+    // Sanity check: bundle too small
+    if (bundleFile.length() < 2 * 1024) {
+      Log.e("OTA", "Bundle suspiciously small → deleting")
+      currentDir.deleteRecursively()
+      return null
+    }
+
+    // Hash validation
+    return try {
+      val expectedHash = hashFile.readText().trim()
+      val actualHash = computeSHA256(bundleFile)
+
+      if (expectedHash.equals(actualHash, ignoreCase = true)) {
+        Log.d("OTA", "OTA bundle verified ✅")
+        bundleFile.absolutePath
+      } else {
+        Log.e("OTA", "Hash mismatch → rollback to backup")
+        currentDir.deleteRecursively()
+
+        if (backupDir.exists()) {
+          backupDir.renameTo(currentDir)
+          val recovered = File(currentDir, "index.android.bundle")
+          if (recovered.exists()) {
+            Log.d("OTA", "Recovered from backup")
+            recovered.absolutePath
+          } else {
+            null
+          }
+        } else {
+          null
+        }
+      }
+    } catch (e: Exception) {
+      Log.e("OTA", "Bundle verification error", e)
+      null
+    }
+  }
+
+  override val reactNativeHost: ReactNativeHost =
+    object : DefaultReactNativeHost(this) {
+
+      override fun getPackages(): List<ReactPackage> =
+        PackageList(this).packages.apply {
+          // Add your custom packages here
+        }
+
+      override fun getJSMainModuleName(): String = "index"
+
+      override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
+
+      // ===== OTA INJECTION POINT =====
+      override fun getJSBundleFile(): String? {
+        return if (!BuildConfig.DEBUG) {
+          // Try OTA bundle first, fall back to default
+          getOtaBundlePath() ?: super.getJSBundleFile()
+        } else {
+          super.getJSBundleFile()
+        }
+      }
+    }
+
+  override val reactHost: ReactHost
+    get() = getDefaultReactHost(applicationContext, reactNativeHost)
+
+  override fun onCreate() {
+    super.onCreate()
+    SoLoader.init(this, OpenSourceMergedSoMapping)
+  }
+}
+```
+
+**Key features:**
+
+- Validates OTA bundle hash before loading
+- Automatically recovers from backup if validation fails
+- Only loads OTA bundle in release builds (`BuildConfig.DEBUG`)
+- Falls back to default bundle if OTA is unavailable
+
 ## Usage
 
 ### Basic Example
 
 ```typescript
-import { runOTA } from 'rn-ota-updater';
+import { OTARestart, runOTA } from "rn-ota-updater";
 
 const updateBundle = {
-  url: 'https://your-server.com/updates/update.zip',
-  shaHash: 'abc123...', // SHA256 hash of the ZIP file
-  bundleHash: 'def456...', // SHA256 hash of the bundle (optional)
-  sizeBytes: 1024000 // Size in bytes (optional)
+  url: "https://your-server.com/updates/update.zip",
+  shaHash: "abc123...", // SHA256 hash of the ZIP file
+  bundleHash: "def456...", // SHA256 hash of the bundle (optional)
+  sizeBytes: 1024000, // Size in bytes (optional)
 };
 
 const result = await runOTA(updateBundle);
 
-if (result.updated) {
-  // Update successful - app will reload
-  console.log('Update applied successfully');
+if (result.reloadRequired) {
+  OTARestart.restartApp();
 } else {
   // Update failed
   console.error('Update failed:', result.error);
+}
+```
+
+> In development, `OTARestart.restartApp()` uses `DevSettings.reload()` to force a reload from the current bundle.
+>
+> In production on Android, `OTARestart.restartApp()` calls the native `OTARestart.restartApp()` module when it is available.
+
+### Auto Reload
+
+If you want the package to restart immediately after a successful OTA update, pass `autoReload: true`:
+
+```typescript
+await runOTA({
+  ...updateBundle,
+  autoReload: true,
+});
+```
+
+Use this only when it is safe to restart the app immediately. For payment, form, or other critical flows, prefer checking `result.reloadRequired` and calling `OTARestart.restartApp()` yourself.
+
+### Android OTA Restart Module
+
+If you want a production-safe app restart after a successful OTA update, add a native module like this to your Android app:
+
+```kotlin
+package com.nimblemsme
+
+import android.content.Intent
+import android.util.Log
+import com.facebook.react.ReactApplication
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReactInstanceManager
+
+class OTARestartModule(
+    private val reactContext: ReactApplicationContext
+) : ReactContextBaseJavaModule(reactContext) {
+
+    override fun getName(): String = "OTARestart"
+
+    @ReactMethod
+    fun restartApp() {
+        val activity = currentActivity ?: run {
+            Log.e("OTARestart", "No current activity found")
+            return
+        }
+
+        val application = activity.application
+
+        if (application !is ReactApplication) {
+            Log.e("OTARestart", "Application is not a ReactApplication")
+            return
+        }
+
+        val reactNativeHost = application.reactNativeHost
+
+        activity.runOnUiThread {
+            try {
+                val instanceManager: ReactInstanceManager = reactNativeHost.reactInstanceManager
+                instanceManager.onHostDestroy(activity)
+                reactNativeHost.clear()
+
+                val intent = activity.packageManager
+                    .getLaunchIntentForPackage(activity.packageName)
+                    ?.apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    }
+
+                activity.startActivity(intent)
+                activity.finish()
+                android.os.Process.killProcess(android.os.Process.myPid())
+
+            } catch (e: Exception) {
+                Log.e("OTARestart", "Restart failed: ${e.message}")
+            }
+        }
+    }
 }
 ```
 
@@ -85,7 +298,7 @@ if (result.updated) {
 The package includes automatic recovery functionality. Call this on app startup:
 
 ```typescript
-import { recoverIfNeeded } from 'rn-ota-updater';
+import { recoverIfNeeded } from "rn-ota-updater";
 
 await recoverIfNeeded(); // Call this early in your app initialization
 ```
@@ -95,7 +308,7 @@ await recoverIfNeeded(); // Call this early in your app initialization
 For updates that include image assets or other static files, you can enable asset mapping to serve updated assets from the OTA directory:
 
 ```typescript
-import { loadOtaAssetsMap, recoverIfNeeded } from 'rn-ota-updater';
+import { loadOtaAssetsMap, recoverIfNeeded } from "rn-ota-updater";
 
 // Initialize recovery first
 await recoverIfNeeded();
@@ -129,11 +342,13 @@ npx rn-ota-build-file [options]
 ```
 
 **Options:**
+
 - `--rn-assets <path>` - Path to React Native assets (default: `src/assets/images`)
 - `--android-res <path>` - Path to Android resources (default: `android/app/src/main/res`)
 - `--help, -h` - Show help message
 
 **Examples:**
+
 ```bash
 # Use default paths
 npx rn-ota-build-file
@@ -155,21 +370,21 @@ This creates `otaBundle.zip` in the repository root and prints both:
 To prevent reapplying the same OTA version, you can check a local version file before processing an update. Example:
 
 ```typescript
-import RNFS from 'react-native-fs';
+import RNFS from "react-native-fs";
 
 const VERSION_FILE = `${RNFS.DocumentDirectoryPath}/ota/version.txt`;
 
-const newVersion = '1';
+const newVersion = "1";
 let lastVersion = null;
 const exists = await RNFS.exists(VERSION_FILE);
 if (exists) {
-  lastVersion = await RNFS.readFile(VERSION_FILE, 'utf8');
+  lastVersion = await RNFS.readFile(VERSION_FILE, "utf8");
 }
 
-console.log('[OTA] lastVersion:', lastVersion);
+console.log("[OTA] lastVersion:", lastVersion);
 
 if (lastVersion === newVersion) {
-  console.log('[OTA] Already up to date');
+  console.log("[OTA] Already up to date");
   return;
 }
 ```
@@ -178,15 +393,25 @@ This ensures the update only runs when the stored OTA version differs from the i
 
 ## API Reference
 
-### `runOTA(bundle: OTABundle): Promise<OTAResult>`
+### `runOTA(bundle: OTABundle): Promise<RunOTAResult>`
 
 Applies an OTA update.
 
 **Parameters:**
+
 - `bundle`: Object containing update information
 
 **Returns:**
-- `Promise<OTAResult>`: Result object with success/error information
+
+- `Promise<RunOTAResult>`: Result object with update/reload status and error information
+
+### `reloadApp(): void`
+
+Reloads the app after an OTA update. In development this uses React Native `DevSettings.reload()`. In production Android this calls the native `OTARestart.restartApp()` module when available.
+
+### `OTARestart.restartApp(): void`
+
+Package-level alias for `reloadApp()`, so app code does not need to access `NativeModules.OTARestart` directly.
 
 ### `recoverIfNeeded(): Promise<void>`
 
@@ -210,14 +435,23 @@ Returns the current assets mapping object for debugging purposes.
 
 ```typescript
 interface OTABundle {
-  url: string;        // URL to download the update ZIP
-  shaHash: string;    // SHA256 hash of the ZIP file
+  url: string; // URL to download the update ZIP
+  version: string; // OTA version
+  shaHash: string; // SHA256 hash of the ZIP file
   bundleHash?: string; // SHA256 hash of the extracted bundle
-  sizeBytes?: number;  // Size of the update in bytes
+  sizeBytes?: number; // Size of the update in bytes
+  signature?: string; // Optional signature metadata
+  autoReload?: boolean; // Reload automatically after a successful update
 }
 
 interface OTAResult {
   onSuccess: boolean;
+  error?: string;
+}
+
+interface RunOTAResult {
+  updated: boolean;
+  reloadRequired: boolean;
   error?: string;
 }
 ```
