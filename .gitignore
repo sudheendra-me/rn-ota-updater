@@ -126,3 +126,5 @@ temp/
 
 # Yarn Integrity file
 .yarn-integrity
+
+android/.gradle/

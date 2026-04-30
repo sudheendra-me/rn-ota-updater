@@ -31,6 +31,7 @@ import {
   OTA_ZIP,
   OTA_LOCK,
   BUNDLE_NAME,
+  ASSETS_JSON,
 } from './constants';
 
 import {safeUnlink, computeSHA256, ensureDiskSpace, exists} from './fileSystem';
@@ -65,6 +66,18 @@ const atomicSwap = async () => {
     `${OTA_STAGING}/hash.txt`,
     `${OTA_CURRENT}/hash.txt`,
   );
+
+  await RNFS.moveFile(
+    `${OTA_STAGING}/${ASSETS_JSON}`,
+    `${OTA_CURRENT}/${ASSETS_JSON}`,
+  );
+
+  if (await exists(`${OTA_STAGING}/assets`)) {
+    await RNFS.moveFile(
+      `${OTA_STAGING}/assets`,
+      `${OTA_CURRENT}/assets`,
+    );
+  }
 };
 
 // main

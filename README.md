@@ -280,9 +280,9 @@ This will automatically intercept asset resolution and serve updated assets when
 
 ## OTA Build Script
 
-A helper script is included to generate an OTA ZIP bundle with bundled RN assets and an `assets.json` mapping.
+A helper CLI is included to generate an Android OTA ZIP from your React Native app. It runs `react-native bundle`, copies Metro-generated assets into the OTA package, generates an `assets.json` hash map, and writes a small manifest with the ZIP and bundle hashes.
 
-Run the script with:
+Run the script from your React Native app root:
 
 ```bash
 npx rn-ota-build-file
@@ -300,6 +300,7 @@ npx rn-ota-build-file [options]
 
 - `--rn-assets <path>` - Path to React Native assets (default: `src/assets/images`)
 - `--android-res <path>` - Path to Android resources (default: `android/app/src/main/res`)
+- `--reset-cache` - Passes `--reset-cache` to Metro while generating the bundle
 - `--help, -h` - Show help message
 
 **Examples:**
@@ -313,12 +314,39 @@ npx rn-ota-build-file --rn-assets assets/images
 
 # Custom Android resources and RN assets
 npx rn-ota-build-file --android-res android/app/src/main/res --rn-assets src/assets
+
+# Reset Metro cache while building
+npx rn-ota-build-file --reset-cache
 ```
 
-This creates `otaBundle.zip` in the repository root and prints both:
+### Generated Files
 
-- `bundleHash` — SHA256 of the generated JS bundle
-- `zipHash` — SHA256 of the final ZIP bundle
+The CLI creates these files in the project root:
+
+- `otaBundle.zip` - Final OTA ZIP to upload to your update server
+- `ota-manifest.json` - Local manifest containing `version`, `zipHash`, and `bundleHash`
+
+The ZIP contains:
+
+- `index.android.bundle` - Release JS bundle generated from `index.js`
+- `assets.json` - SHA256 map for supported assets
+- `assets/rn/*` - Metro-generated RN assets copied from `drawable*` and `raw*` build output
+- `assets/drawable*/*`, `assets/mipmap*/*`, and other supported Android resource assets copied from `android/app/src/main/res`
+
+Supported asset extensions are `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.ttf`, and `.mp4`.
+
+Use the generated manifest values when serving an OTA update:
+
+```typescript
+await runOTA({
+  url: "https://your-server.com/updates/otaBundle.zip",
+  version: "1",
+  shaHash: manifest.zipHash,
+  bundleHash: manifest.bundleHash,
+});
+```
+
+`shaHash` must be the ZIP hash (`zipHash`), while `bundleHash` must be the hash of `index.android.bundle`.
 
 ## Version Checking
 
@@ -432,8 +460,8 @@ DocumentDirectory/
 │   ├── current/          # Active bundle
 │   │   ├── index.android.bundle
 │   │   ├── hash.txt
-│   │   └── assets.json   # Assets mapping (if included in update)
-│   ├── assets/           # Updated assets directory
+│   │   ├── assets.json   # Assets mapping
+│   │   └── assets/       # Updated assets directory
 │   ├── staging/          # Downloaded update (temporary)
 │   ├── backup/           # Previous version (for rollback)
 │   ├── update.zip        # Downloaded ZIP (temporary)

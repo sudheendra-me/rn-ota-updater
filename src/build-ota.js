@@ -4,17 +4,21 @@ console.log("OTA CLI running...");
 
 // ===== CLI ARGS =====
 const args = process.argv.slice(2);
-let rnAssetsSrc = 'src/assets/images'; // default
-let androidResDir = 'android/app/src/main/res'; // default
 
-// Parse arguments
+let rnAssetsSrc = 'src/assets/images';
+let androidResDir = 'android/app/src/main/res';
+let resetCache = false;
+
+// Parse args
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--rn-assets' && args[i + 1]) {
     rnAssetsSrc = args[i + 1];
-    i++; // skip next arg
+    i++;
   } else if (args[i] === '--android-res' && args[i + 1]) {
     androidResDir = args[i + 1];
-    i++; // skip next arg
+    i++;
+  } else if (args[i] === '--reset-cache') {
+    resetCache = true;
   } else if (args[i] === '--help' || args[i] === '-h') {
     console.log(`
 OTA Build Tool
@@ -22,14 +26,10 @@ OTA Build Tool
 Usage: npx rn-ota-build-file [options]
 
 Options:
-  --rn-assets <path>     Path to React Native assets (default: src/assets/images)
-  --android-res <path>   Path to Android resources (default: android/app/src/main/res)
-  --help, -h            Show this help message
-
-Examples:
-  npx rn-ota-build-file
-  npx rn-ota-build-file --rn-assets assets/images
-  npx rn-ota-build-file --android-res android/app/src/main/res --rn-assets src/assets
+  --rn-assets <path>       RN assets path
+  --android-res <path>     Android res path
+  --reset-cache            Reset Metro cache
+  --help, -h               Show help
 `);
     process.exit(0);
   }
@@ -37,11 +37,12 @@ Examples:
 
 console.log(`Using RN assets path: ${rnAssetsSrc}`);
 console.log(`Using Android res path: ${androidResDir}`);
+console.log(`Reset cache: ${resetCache}`);
 console.log('');
 
 const fs = require('fs');
 const path = require('path');
-const {execSync} = require('child_process');
+const { execSync } = require('child_process');
 const crypto = require('crypto');
 
 // ===== CONFIG =====
@@ -54,13 +55,7 @@ const ANDROID_RES_DIR = path.join(process.cwd(), androidResDir);
 const RN_ASSETS_SRC = path.join(process.cwd(), rnAssetsSrc);
 
 const VALID_EXTENSIONS = [
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.webp',
-  '.gif',
-  '.ttf',
-  '.mp4',
+  '.png', '.jpg', '.jpeg', '.webp', '.gif', '.ttf', '.mp4',
 ];
 
 // ===== HELPERS =====
@@ -84,7 +79,6 @@ function computeHash(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
     const stream = fs.createReadStream(filePath);
-
     stream.on('data', d => hash.update(d));
     stream.on('end', () => resolve(hash.digest('hex')));
     stream.on('error', reject);
@@ -98,47 +92,40 @@ function computeHashSync(filePath) {
     .digest('hex');
 }
 
-function normalizeRnAsset(filePath) {
-  const fileName = path.basename(filePath);
-
-  const relDir = path
-    .dirname(filePath)
-    .replace(RN_ASSETS_SRC, '')
-    .replace(/[\\/]/g, '_')
-    .replace(/^_/, '');
-
-  const prefix = relDir ? `src_images_${relDir}_` : 'src_images_';
-  return (prefix + fileName).toLowerCase();
+function copyFileSync(src, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
 }
 
 // ===== START =====
 console.log('🔄 Starting OTA Build...\n');
 
-// ===== CLEAN =====
-if (fs.existsSync(BUILD_DIR)) {
-  fs.rmSync(BUILD_DIR, {recursive: true, force: true});
-}
-if (fs.existsSync(ZIP_PATH)) {
-  fs.unlinkSync(ZIP_PATH);
-}
+// CLEAN
+if (fs.existsSync(BUILD_DIR)) fs.rmSync(BUILD_DIR, { recursive: true, force: true });
+if (fs.existsSync(ZIP_PATH)) fs.unlinkSync(ZIP_PATH);
 
-fs.mkdirSync(ASSETS_DIR, {recursive: true});
-fs.mkdirSync(RN_OTA_DIR, {recursive: true});
+fs.mkdirSync(ASSETS_DIR, { recursive: true });
+fs.mkdirSync(RN_OTA_DIR, { recursive: true });
 
 // ===== BUNDLE =====
 console.log('📦 Generating bundle...');
+
 try {
+  const resetFlag = resetCache ? '--reset-cache' : '';
+
   execSync(
     `npx react-native bundle \
     --platform android \
     --dev false \
+    ${resetFlag} \
     --entry-file index.js \
     --bundle-output ota_build/index.android.bundle \
     --assets-dest ota_build`,
-    {stdio: 'inherit'},
+    { stdio: 'inherit' }
   );
 } catch (error) {
-  console.error('❌ Bundle generation failed', error.message);
+  console.error('❌ Bundle generation failed');
+  console.error(error?.stdout?.toString() || error.message);
   process.exit(1);
 }
 
@@ -148,6 +135,14 @@ if (!fs.existsSync(bundlePath)) {
   console.error('❌ Bundle not found');
   process.exit(1);
 }
+
+// ✅ Bundle size validation
+const stat = fs.statSync(bundlePath);
+if (stat.size < 5 * 1024) {
+  console.error('❌ Bundle too small (corrupt)');
+  process.exit(1);
+}
+
 console.log('✅ Bundle verified');
 
 // ===== COPY RN ASSETS =====
@@ -178,89 +173,81 @@ densityDirs.forEach(dir => {
 
 console.log(`✅ Copied ${copied} assets`);
 
-// ===== GENERATE assets.json =====
-console.log('\n📄 Generating assets.json...');
+// ===== COPY ANDROID RES ASSETS =====
+console.log('\n📂 Copying Android res assets...');
 
-const assetsMap = {};
+let copiedAndroidRes = 0;
 
-// Android assets
 getAllFiles(ANDROID_RES_DIR).forEach(file => {
   const ext = path.extname(file).toLowerCase();
   if (!VALID_EXTENSIONS.includes(ext)) return;
 
   const key = path.relative(ANDROID_RES_DIR, file).replace(/\\/g, '/');
-  assetsMap[key] = {
-    path: key,
-    hash: computeHashSync(file),
-  };
+  copyFileSync(file, path.join(ASSETS_DIR, key));
+  copiedAndroidRes++;
 });
 
-// RN assets
-getAllFiles(RN_ASSETS_SRC).forEach(file => {
+console.log(`✅ Copied ${copiedAndroidRes} Android res assets`);
+
+// ===== assets.json =====
+console.log('\n📄 Generating assets.json...');
+
+const assetsMap = {};
+
+getAllFiles(ASSETS_DIR).forEach(file => {
   const ext = path.extname(file).toLowerCase();
   if (!VALID_EXTENSIONS.includes(ext)) return;
 
-  const key = `rn/${normalizeRnAsset(file)}`;
+  const key = path.relative(ASSETS_DIR, file).replace(/\\/g, '/');
   assetsMap[key] = {
     path: key,
     hash: computeHashSync(file),
   };
 });
 
-const assetsJsonPath = path.join(BUILD_DIR, 'assets.json');
-fs.writeFileSync(assetsJsonPath, JSON.stringify(assetsMap, null, 2));
-
-console.log(
-  `✅ assets.json generated — ${Object.keys(assetsMap).length} entries`,
+fs.writeFileSync(
+  path.join(BUILD_DIR, 'assets.json'),
+  JSON.stringify(assetsMap, null, 2)
 );
+
+console.log(`✅ assets.json generated — ${Object.keys(assetsMap).length} entries`);
 
 // ===== MAIN =====
 (async () => {
   try {
     console.log('\n🔐 Computing bundle hash...');
     const bundleHash = await computeHash(bundlePath);
-    console.log(`📦 bundleHash: ${bundleHash}`);
 
-    // ===== ZIP =====
     console.log('\n🗜️ Creating ZIP...');
     if (process.platform === 'win32') {
       execSync(
         `powershell Compress-Archive -Path "${BUILD_DIR}\\*" -DestinationPath "${ZIP_PATH}" -Force`,
-        {stdio: 'inherit'},
+        { stdio: 'inherit' }
       );
     } else {
-      execSync(`cd ota_build && zip -r "${ZIP_PATH}" .`, {
-        stdio: 'inherit',
-      });
+      execSync(`cd ota_build && zip -r "${ZIP_PATH}" .`, { stdio: 'inherit' });
     }
 
     console.log('✅ ZIP created');
 
-    console.log('\n🔐 Computing zip hash...');
     const zipHash = await computeHash(ZIP_PATH);
-    console.log(`📦 zipHash: ${zipHash}`);
 
-    // ===== CLEAN =====
-    fs.rmSync(BUILD_DIR, {recursive: true, force: true});
+    // save manifest
+    const manifest = {
+      version: 'x.x.x',
+      zipHash,
+      bundleHash,
+    };
 
-    // ===== OUTPUT =====
-    console.log('\n🎉 OTA BUILD SUCCESS');
-    console.log('----------------------------------');
-
-    console.log(
-      JSON.stringify(
-        {
-          url: 'https://your-server.com/api/v1/ota/otaBundle.zip',
-          version: 'x.x.x',
-          zipHash,
-          bundleHash,
-        },
-        null,
-        2,
-      ),
+    fs.writeFileSync(
+      path.join(process.cwd(), 'ota-manifest.json'),
+      JSON.stringify(manifest, null, 2)
     );
 
-    console.log('----------------------------------\n');
+    fs.rmSync(BUILD_DIR, { recursive: true, force: true });
+
+    console.log('\n🎉 OTA BUILD SUCCESS');
+    console.log(JSON.stringify(manifest, null, 2));
   } catch (err) {
     console.error('❌ OTA build failed:', err.message);
     process.exit(1);

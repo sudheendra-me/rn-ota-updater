@@ -41,6 +41,10 @@ const atomicSwap = async () => {
     await RNFS.mkdir(constants_1.OTA_CURRENT);
     await RNFS.moveFile(`${constants_1.OTA_STAGING}/${constants_1.BUNDLE_NAME}`, `${constants_1.OTA_CURRENT}/${constants_1.BUNDLE_NAME}`);
     await RNFS.moveFile(`${constants_1.OTA_STAGING}/hash.txt`, `${constants_1.OTA_CURRENT}/hash.txt`);
+    await RNFS.moveFile(`${constants_1.OTA_STAGING}/${constants_1.ASSETS_JSON}`, `${constants_1.OTA_CURRENT}/${constants_1.ASSETS_JSON}`);
+    if (await (0, fileSystem_1.exists)(`${constants_1.OTA_STAGING}/assets`)) {
+        await RNFS.moveFile(`${constants_1.OTA_STAGING}/assets`, `${constants_1.OTA_CURRENT}/assets`);
+    }
 };
 // main
 const applyOTABundle = async (bundle) => {

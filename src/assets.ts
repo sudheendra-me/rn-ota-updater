@@ -21,7 +21,7 @@ try {
   );
 }
 
-const OTA_DIR = `${RNFS.DocumentDirectoryPath}/ota`;
+const OTA_DIR = `${RNFS.DocumentDirectoryPath}/ota/current`;
 const OTA_ASSETS_DIR = `${OTA_DIR}/assets`;
 const OTA_ASSETS_MAP = `${OTA_DIR}/assets.json`;
 

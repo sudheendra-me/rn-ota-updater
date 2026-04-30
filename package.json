@@ -16,7 +16,8 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "android",
+    "android/build.gradle",
+    "android/src",
     "src/build-ota.js"
   ],
   "react-native": {
