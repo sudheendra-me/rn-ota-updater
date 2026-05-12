@@ -121,25 +121,6 @@ const buildValidAssetSet = async () => {
   );
 };
 
-const findAssetKeyForUri1 = (uri: string): string | undefined => {
-  const clean = normalizeUri(uri);
-
-  if (assetsMap[clean]) return clean;
-
-  const parts = clean.split("/").filter(Boolean);
-  for (let i = 0; i < parts.length; i++) {
-    const key = parts.slice(i).join("/");
-    if (assetsMap[key]) return key;
-  }
-
-  const fileName = getFileName(clean);
-  if (fileName && fileNameIndex[fileName]) return fileNameIndex[fileName];
-
-  if (fileName) {
-    const noScale = removeScaleSuffix(fileName);
-    if (fileNameIndex[noScale]) return fileNameIndex[noScale];
-  }
-};
 
 const findAssetKeyForUri = (uri: string): string | undefined => {
   const clean = normalizeUri(uri);
@@ -280,6 +261,8 @@ export const initOtaAssets = async (): Promise<void> => {
     console.log("[OTA] init failed", e);
   }
 };
+
+export const loadOtaAssetsMap = initOtaAssets;
 
 export const clearOtaAssetsMap = () => {
   assetsMap = {};

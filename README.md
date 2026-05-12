@@ -57,7 +57,16 @@ For Android, add these permissions to your `android/app/src/main/AndroidManifest
 
 ### Android MainApplication.kt Integration
 
-To enable OTA bundle loading in your React Native Android app, update your `android/app/src/main/java/com/yourcompany/MainApplication.kt`:
+To enable OTA bundle loading in your React Native Android app, update your `android/app/src/main/java/com/yourcompany/MainApplication.kt` based on your React Native version.
+
+Use the same `computeSHA256()` and `getOtaBundlePath()` helper functions in both setups. The difference is where the OTA bundle path is injected:
+
+| React Native version | Android entry point | OTA injection |
+| -------------------- | ------------------- | ------------- |
+| RN 0.70 - 0.75       | `ReactNativeHost`   | `getJSBundleFile()` |
+| RN 0.76+             | `ReactHost`         | `jsBundleFilePath` |
+
+#### RN 0.70 - 0.75
 
 ```kotlin
 package com.yourcompany
@@ -66,13 +75,9 @@ import android.app.Application
 import android.util.Log
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
-import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
-import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
-import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
-import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
 import java.io.File
 import java.security.MessageDigest
@@ -174,8 +179,120 @@ class MainApplication : Application(), ReactApplication {
       }
     }
 
-  override val reactHost: ReactHost
-    get() = getDefaultReactHost(applicationContext, reactNativeHost)
+  override fun onCreate() {
+    super.onCreate()
+    SoLoader.init(this, false)
+  }
+}
+```
+
+#### RN 0.76+
+
+```kotlin
+package com.yourcompany
+
+import android.app.Application
+import android.util.Log
+import com.facebook.react.PackageList
+import com.facebook.react.ReactApplication
+import com.facebook.react.ReactHost
+import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
+import com.facebook.react.soloader.OpenSourceMergedSoMapping
+import com.facebook.soloader.SoLoader
+import java.io.File
+import java.security.MessageDigest
+
+class MainApplication : Application(), ReactApplication {
+
+  // ===== HASH VALIDATION =====
+  private fun computeSHA256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { fis ->
+      val buffer = ByteArray(8192)
+      var bytesRead: Int
+      while (fis.read(buffer).also { bytesRead = it } != -1) {
+        digest.update(buffer, 0, bytesRead)
+      }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+  }
+
+  // ===== OTA BUNDLE RESOLUTION =====
+  private fun getOtaBundlePath(): String? {
+    val otaDir = File(filesDir, "ota")
+    val currentDir = File(otaDir, "current")
+    val backupDir = File(otaDir, "backup")
+
+    val bundleFile = File(currentDir, "index.android.bundle")
+    val hashFile = File(currentDir, "hash.txt")
+
+    // Recovery: restore from backup if current missing
+    if (!currentDir.exists() && backupDir.exists()) {
+      Log.w("OTA", "Recovering from backup...")
+      backupDir.renameTo(currentDir)
+    }
+
+    // No valid OTA bundle
+    if (!bundleFile.exists() || !hashFile.exists()) {
+      Log.d("OTA", "No OTA bundle found - using default")
+      return null
+    }
+
+    // Sanity check: bundle too small
+    if (bundleFile.length() < 2 * 1024) {
+      Log.e("OTA", "Bundle suspiciously small - deleting")
+      currentDir.deleteRecursively()
+      return null
+    }
+
+    // Hash validation
+    return try {
+      val expectedHash = hashFile.readText().trim()
+      val actualHash = computeSHA256(bundleFile)
+
+      if (expectedHash.equals(actualHash, ignoreCase = true)) {
+        Log.d("OTA", "OTA bundle verified")
+        bundleFile.absolutePath
+      } else {
+        Log.e("OTA", "Hash mismatch - rollback to backup")
+        currentDir.deleteRecursively()
+
+        if (backupDir.exists()) {
+          backupDir.renameTo(currentDir)
+          val recovered = File(currentDir, "index.android.bundle")
+          if (recovered.exists()) {
+            Log.d("OTA", "Recovered from backup")
+            recovered.absolutePath
+          } else {
+            null
+          }
+        } else {
+          null
+        }
+      }
+    } catch (e: Exception) {
+      Log.e("OTA", "Bundle verification error", e)
+      null
+    }
+  }
+
+  override val reactHost: ReactHost by lazy {
+    getDefaultReactHost(
+      context = applicationContext,
+      packageList = PackageList(this).packages.apply {
+        // Add your custom packages here
+      },
+      jsMainModulePath = "index",
+      jsBundleAssetPath = "index.android.bundle",
+      jsBundleFilePath = if (!BuildConfig.DEBUG) {
+        // Try OTA bundle first, fall back to default bundled asset
+        getOtaBundlePath()
+      } else {
+        null
+      },
+      useDevSupport = BuildConfig.DEBUG,
+    )
+  }
 
   override fun onCreate() {
     super.onCreate()
@@ -405,6 +522,8 @@ Recovers from a failed update if needed. Should be called on app startup.
 Loads the OTA assets map and sets up asset interception for images and other static assets. This allows serving updated assets from the OTA directory instead of bundled assets.
 
 **Call this after `recoverIfNeeded()` and before using any assets in your app.**
+
+`initOtaAssets()` is also exported as a backwards-compatible alias for the same behavior.
 
 ### `clearOtaAssetsMap(): void`
 
