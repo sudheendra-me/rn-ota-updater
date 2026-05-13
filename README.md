@@ -18,6 +18,57 @@ A React Native library for implementing Over-The-Air (OTA) updates with custom u
 npm install rn-ota-updater
 ```
 
+## Quick Start
+
+### 1. Install
+
+```bash
+npm install rn-ota-updater react-native-fs react-native-zip-archive
+```
+
+### 2. Add OTA bundle injection
+
+Inside `MainApplication.kt`, keep your generated RN template and add the OTA fallback inside `reactNativeHost`:
+
+```kotlin
+override fun getJSBundleFile(): String? {
+  return if (!BuildConfig.DEBUG) {
+    getOtaBundlePath() ?: super.getJSBundleFile()
+  } else {
+    super.getJSBundleFile()
+  }
+}
+```
+
+### 3. Initialize on app startup
+
+```typescript
+import {recoverIfNeeded, loadOtaAssetsMap} from 'rn-ota-updater';
+
+await recoverIfNeeded();
+await loadOtaAssetsMap();
+```
+
+### 4. Apply OTA update
+
+```typescript
+import {OTARestart, runOTA} from 'rn-ota-updater';
+
+const result = await runOTA(update);
+
+if (result.reloadRequired) {
+  OTARestart.restartApp();
+}
+```
+
+## Platform Support
+
+| Platform | Supported |
+| -------- | --------- |
+| Android  | Yes       |
+| iOS      | Planned   |
+| Expo     | No        |
+
 ## Peer Dependencies
 
 This package uses **peer dependencies** to avoid bundling native modules. You must install these dependencies in your React Native app:
@@ -30,81 +81,66 @@ This package uses **peer dependencies** to avoid bundling native modules. You mu
 | `react-native-fs`          | `>=2.20.0` | File system operations |
 | `react-native-zip-archive` | `>=6.0.0`  | ZIP file extraction    |
 
-## React Native Compatibility
+## React Native Architecture Support
 
-| React Native Version | Architecture | Integration Type |
-| -------------------- | ------------ | ---------------- |
-| 0.70 - 0.75          | Old Architecture | `ReactNativeHost` |
-| 0.76+ (Old Arch)     | Old Architecture | `ReactNativeHost` |
-| 0.76+ (New Arch)     | Fabric/TurboModules | `ReactHost` |
+`rn-ota-updater` supports:
 
-> `rn-ota-updater` supports both Old Architecture and New Architecture apps.
->
-> You do NOT need to disable:
->
-> ```properties
-> newArchEnabled=true
-> ```
-
-## Important
-
-Use only ONE integration:
-
-- `ReactNativeHost`
-- OR `ReactHost`
-
-Do NOT add both simultaneously.
-
-Choose the integration based on:
-
-```properties
-newArchEnabled=true
-```
-
-Using both can cause startup crashes or duplicate React initialization.
-
-## Choosing the Correct Integration
-
-Check your:
-
-```properties
-android/gradle.properties
-```
-
-If you have:
-
-```properties
-newArchEnabled=true
-```
-
-use the **ReactHost** integration.
-
-If you have:
-
-```properties
-newArchEnabled=false
-```
-
-use the **ReactNativeHost** integration.
-
-## New Architecture Support
-
-Fully supported:
-
+- Old Architecture
+- New Architecture
 - Fabric
 - TurboModules
 - Hermes
-- React Native Bridgeless mode
-- React Native 0.76+
-- React Native 0.79+
+- Designed to support Bridgeless mode on RN 0.76+
+- React Native 0.70+
 
-This is important because many OTA packages currently break on Bridgeless/New Architecture.
+## Important Architecture Clarification
+
+React Native `0.76+` templates commonly include both:
+
+- `reactNativeHost`
+- `reactHost`
+
+inside `MainApplication.kt`.
+
+Do NOT remove the generated `reactNativeHost` from newer React Native templates.
+
+The correct approach is:
+
+- Keep the default React Native generated architecture setup
+- Inject OTA bundle loading through:
+
+```kotlin
+override fun getJSBundleFile(): String?
+```
+
+This setup supports:
+
+- Old Architecture
+- New Architecture
+- Fabric
+- TurboModules
+- Bridgeless mode on RN 0.76+
+
+You do NOT need to disable:
+
+```properties
+newArchEnabled=true
+```
+
+## React Native Version Compatibility
+
+| React Native | Architecture     | Supported |
+| ------------ | ---------------- | --------- |
+| 0.70 - 0.75  | Old Architecture | Yes       |
+| 0.76+        | Old Architecture | Yes       |
+| 0.76+        | New Architecture | Yes       |
+| 0.79+        | Bridgeless       | Designed  |
 
 ## Bridgeless Mode Support
 
-`rn-ota-updater` supports React Native Bridgeless mode.
+`rn-ota-updater` is designed to support React Native Bridgeless mode on RN 0.76+.
 
-OTA bundle injection works correctly with:
+OTA bundle injection is designed to work with:
 
 ```properties
 newArchEnabled=true
@@ -130,42 +166,46 @@ Expo managed workflow is not supported because OTA bundle injection requires nat
 npm install react-native-fs react-native-zip-archive
 ```
 
-### iOS Additional Setup
-
-For iOS, you may need to add permissions to your `Info.plist`:
-
-```xml
-<key>NSAllowsArbitraryLoads</key>
-<true/>
-```
-
 ### Android Additional Setup
 
-For Android, add these permissions to your `android/app/src/main/AndroidManifest.xml`:
+For Android, add this permission to your `android/app/src/main/AndroidManifest.xml`:
 
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
-<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 ```
 
-### Android MainApplication.kt Integration
+Storage permissions are NOT required because OTA files are stored in app-private storage.
 
-To enable OTA bundle loading in your React Native Android app, update your `android/app/src/main/java/com/yourcompany/MainApplication.kt` based on your React Native version and architecture setting.
+### Correct MainApplication.kt Setup
 
-The exact `MainApplication.kt` template differs slightly between RN versions. Keep the default generated properties from your RN template and only inject the OTA bundle path using the integration shown below.
+This setup is designed to work with:
 
-Use the same `computeSHA256()` and `getOtaBundlePath()` helper functions in both setups. The difference is where the OTA bundle path is injected:
+- RN 0.76+
+- RN 0.77+
+- RN 0.78+
+- RN 0.79+
+- Fabric
+- TurboModules
+- Hermes
+- Bridgeless mode on RN 0.76+
 
-| React Native setup | Android entry point | OTA injection |
-| ------------------ | ------------------- | ------------- |
-| RN 0.70 - 0.75 | `ReactNativeHost` | `getJSBundleFile()` |
-| RN 0.76+ with `newArchEnabled=false` | `ReactNativeHost` | `getJSBundleFile()` |
-| RN 0.76+ with `newArchEnabled=true` | `ReactHost` | `jsBundleFilePath` |
+The exact `MainApplication.kt` template differs slightly between RN versions. Keep the default generated structure from your RN template and only add the OTA helper functions plus the `getJSBundleFile()` override shown below.
 
-Keep the `onCreate()` implementation generated by your RN template, including the default `SoLoader.init(...)` for your RN version.
+Always start from the generated React Native template for your RN version.
 
-#### RN 0.70 - 0.75, or RN 0.76+ with Old Architecture
+Do not fully replace your existing `MainApplication.kt`.
+
+Only:
+
+- add OTA helper functions
+- add the `getJSBundleFile()` override
+
+Keep the rest of the generated RN template intact.
+
+`getJSBundleFile()` is ignored in debug builds because Metro serves the JS bundle directly.
+
+<details>
+<summary>Full MainApplication.kt Example</summary>
 
 ```kotlin
 package com.yourcompany
@@ -174,9 +214,13 @@ import android.app.Application
 import android.util.Log
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
+import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
+import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
+import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
 import java.io.File
 import java.security.MessageDigest
@@ -186,14 +230,19 @@ class MainApplication : Application(), ReactApplication {
   // ===== HASH VALIDATION =====
   private fun computeSHA256(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")
+
     file.inputStream().use { fis ->
       val buffer = ByteArray(8192)
       var bytesRead: Int
+
       while (fis.read(buffer).also { bytesRead = it } != -1) {
         digest.update(buffer, 0, bytesRead)
       }
     }
-    return digest.digest().joinToString("") { "%02x".format(it) }
+
+    return digest.digest().joinToString("") {
+      "%02x".format(it)
+    }
   }
 
   // ===== OTA BUNDLE RESOLUTION =====
@@ -205,42 +254,41 @@ class MainApplication : Application(), ReactApplication {
     val bundleFile = File(currentDir, "index.android.bundle")
     val hashFile = File(currentDir, "hash.txt")
 
-    // Recovery: restore from backup if current missing
+    // Recover backup if needed
     if (!currentDir.exists() && backupDir.exists()) {
-      Log.w("OTA", "Recovering from backup...")
+      Log.w("OTA", "Recovering OTA backup")
       backupDir.renameTo(currentDir)
     }
 
-    // No valid OTA bundle
+    // No OTA available
     if (!bundleFile.exists() || !hashFile.exists()) {
-      Log.d("OTA", "No OTA bundle found → using default")
+      Log.d("OTA", "No OTA bundle found")
       return null
     }
 
-    // Sanity check: bundle too small
-    if (bundleFile.length() < 2 * 1024) {
-      Log.e("OTA", "Bundle suspiciously small → deleting")
+    // Sanity check
+    if (bundleFile.length() < 2048) {
+      Log.e("OTA", "Bundle too small - deleting")
       currentDir.deleteRecursively()
       return null
     }
 
-    // Hash validation
     return try {
       val expectedHash = hashFile.readText().trim()
       val actualHash = computeSHA256(bundleFile)
 
       if (expectedHash.equals(actualHash, ignoreCase = true)) {
-        Log.d("OTA", "OTA bundle verified ✅")
+        Log.d("OTA", "OTA bundle verified")
         bundleFile.absolutePath
       } else {
-        Log.e("OTA", "Hash mismatch → rollback to backup")
+        Log.e("OTA", "OTA hash mismatch - rolling back")
         currentDir.deleteRecursively()
 
         if (backupDir.exists()) {
           backupDir.renameTo(currentDir)
           val recovered = File(currentDir, "index.android.bundle")
+
           if (recovered.exists()) {
-            Log.d("OTA", "Recovered from backup")
             recovered.absolutePath
           } else {
             null
@@ -250,11 +298,12 @@ class MainApplication : Application(), ReactApplication {
         }
       }
     } catch (e: Exception) {
-      Log.e("OTA", "Bundle verification error", e)
+      Log.e("OTA", "Bundle validation failed", e)
       null
     }
   }
 
+  // REQUIRED FOR RN 0.76+
   override val reactNativeHost: ReactNativeHost =
     object : DefaultReactNativeHost(this) {
 
@@ -267,10 +316,15 @@ class MainApplication : Application(), ReactApplication {
 
       override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
 
-      // ===== OTA INJECTION POINT =====
+      override fun isNewArchEnabled(): Boolean =
+        BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+
+      override fun isHermesEnabled(): Boolean =
+        BuildConfig.IS_HERMES_ENABLED
+
+      // OTA Injection
       override fun getJSBundleFile(): String? {
         return if (!BuildConfig.DEBUG) {
-          // Try OTA bundle first, fall back to default
           getOtaBundlePath() ?: super.getJSBundleFile()
         } else {
           super.getJSBundleFile()
@@ -278,177 +332,85 @@ class MainApplication : Application(), ReactApplication {
       }
     }
 
-  override fun onCreate() {
-    super.onCreate()
-    SoLoader.init(this, /* native exopackage */ false)
-  }
-}
-```
-
-#### RN 0.76+ (New Architecture / Fabric Enabled)
-
-> React Native 0.76+ uses `ReactHost` internally.
->
-> Using `ReactNativeHost` directly in New Architecture apps will crash with:
->
-> ```text
-> You should not use ReactNativeHost directly in the New Architecture
-> ```
->
-> Therefore OTA bundle injection must happen using:
->
-> ```kotlin
-> jsBundleFilePath
-> ```
->
-> instead of overriding:
->
-> ```kotlin
-> getJSBundleFile()
-> ```
-
-```kotlin
-package com.yourcompany
-
-import android.app.Application
-import android.util.Log
-import com.facebook.react.PackageList
-import com.facebook.react.ReactApplication
-import com.facebook.react.ReactHost
-import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
-import com.facebook.react.soloader.OpenSourceMergedSoMapping
-import com.facebook.soloader.SoLoader
-import java.io.File
-import java.security.MessageDigest
-
-class MainApplication : Application(), ReactApplication {
-
-  // ===== HASH VALIDATION =====
-  private fun computeSHA256(file: File): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    file.inputStream().use { fis ->
-      val buffer = ByteArray(8192)
-      var bytesRead: Int
-      while (fis.read(buffer).also { bytesRead = it } != -1) {
-        digest.update(buffer, 0, bytesRead)
-      }
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
-  }
-
-  // ===== OTA BUNDLE RESOLUTION =====
-  private fun getOtaBundlePath(): String? {
-    val otaDir = File(filesDir, "ota")
-    val currentDir = File(otaDir, "current")
-    val backupDir = File(otaDir, "backup")
-
-    val bundleFile = File(currentDir, "index.android.bundle")
-    val hashFile = File(currentDir, "hash.txt")
-
-    // Recovery: restore from backup if current missing
-    if (!currentDir.exists() && backupDir.exists()) {
-      Log.w("OTA", "Recovering from backup...")
-      backupDir.renameTo(currentDir)
-    }
-
-    // No valid OTA bundle
-    if (!bundleFile.exists() || !hashFile.exists()) {
-      Log.d("OTA", "No OTA bundle found - using default")
-      return null
-    }
-
-    // Sanity check: bundle too small
-    if (bundleFile.length() < 2 * 1024) {
-      Log.e("OTA", "Bundle suspiciously small - deleting")
-      currentDir.deleteRecursively()
-      return null
-    }
-
-    // Hash validation
-    return try {
-      val expectedHash = hashFile.readText().trim()
-      val actualHash = computeSHA256(bundleFile)
-
-      if (expectedHash.equals(actualHash, ignoreCase = true)) {
-        Log.d("OTA", "OTA bundle verified")
-        bundleFile.absolutePath
-      } else {
-        Log.e("OTA", "Hash mismatch - rollback to backup")
-        currentDir.deleteRecursively()
-
-        if (backupDir.exists()) {
-          backupDir.renameTo(currentDir)
-          val recovered = File(currentDir, "index.android.bundle")
-          if (recovered.exists()) {
-            Log.d("OTA", "Recovered from backup")
-            recovered.absolutePath
-          } else {
-            null
-          }
-        } else {
-          null
-        }
-      }
-    } catch (e: Exception) {
-      Log.e("OTA", "Bundle verification error", e)
-      null
-    }
-  }
-
+  // NEW ARCHITECTURE HOST
   override val reactHost: ReactHost by lazy {
     getDefaultReactHost(
       context = applicationContext,
-      packageList = PackageList(this).packages.apply {
-        // Add your custom packages here
-      },
-      jsMainModulePath = "index",
-      jsBundleAssetPath = "index.android.bundle",
-      jsBundleFilePath = if (!BuildConfig.DEBUG) {
-        // Try OTA bundle first, fall back to default bundled asset
-        getOtaBundlePath()
-      } else {
-        null
-      },
-      useDevSupport = BuildConfig.DEBUG,
+      reactNativeHost = reactNativeHost
     )
   }
 
   override fun onCreate() {
     super.onCreate()
+
     SoLoader.init(this, OpenSourceMergedSoMapping)
+
+    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+      load()
+    }
   }
 }
 ```
 
+</details>
+
+If your generated RN template differs, keep the generated `reactNativeHost`, `reactHost`, `SoLoader.init(...)`, and `load()` structure. Only add the OTA helper functions and the `getJSBundleFile()` override.
+
+### Why This Setup Works
+
+#### Old Architecture
+
+React Native loads JS using:
+
+```text
+ReactNativeHost
+```
+
+and:
+
+```kotlin
+getJSBundleFile()
+```
+
+#### New Architecture
+
+React Native internally creates:
+
+```text
+ReactHost
+```
+
+using:
+
+```text
+reactNativeHost
+```
+
+as configuration.
+
+Therefore:
+
+```kotlin
+getJSBundleFile()
+```
+
+still works correctly.
+
 ### Important
 
-Do NOT override:
+Do NOT:
 
-```kotlin
-override val reactNativeHost
-```
+- remove `reactNativeHost`
+- remove `reactHost`
+- remove `load()`
+- remove the generated `isNewArchEnabled()` / `isHermesEnabled()` declarations
 
-inside React Native `0.76+` apps using New Architecture.
+Doing so may break:
 
-Doing so can cause crashes like:
-
-```text
-ReactInstanceManager.createReactContext is unsupported
-```
-
-or
-
-```text
-You should not use ReactNativeHost directly in the New Architecture
-```
-
-Always use `ReactHost` with:
-
-```kotlin
-jsBundleFilePath
-```
-
-for OTA bundle injection.
+- Fabric
+- Bridgeless
+- TurboModules
+- startup initialization
 
 **Key features:**
 
@@ -467,15 +429,9 @@ If your OTA setup previously used:
 override fun getJSBundleFile(): String?
 ```
 
-you must migrate to:
+keep using the same OTA injection point inside the generated `reactNativeHost`.
 
-```kotlin
-jsBundleFilePath
-```
-
-inside `getDefaultReactHost()`.
-
-React Native `0.76+` apps using New Architecture should avoid directly using `ReactNativeHost`.
+React Native `0.76+` New Architecture templates still use `reactNativeHost` as configuration for `reactHost`, so do not remove either generated property.
 
 ## Usage
 
@@ -531,6 +487,31 @@ Example server manifest:
 }
 ```
 
+### Production Update Check
+
+```typescript
+import {OTARestart, runOTA} from 'rn-ota-updater';
+
+const checkForUpdates = async () => {
+  const response = await fetch(
+    'https://your-server.com/ota-manifest.json',
+  );
+
+  const manifest = await response.json();
+
+  const result = await runOTA({
+    url: manifest.url,
+    version: manifest.version,
+    shaHash: manifest.zipHash,
+    bundleHash: manifest.bundleHash,
+  });
+
+  if (result.reloadRequired) {
+    OTARestart.restartApp();
+  }
+};
+```
+
 > In development, `OTARestart.restartApp()` uses `DevSettings.reload()` to force a reload from the current bundle.
 >
 > In production on Android, `OTARestart.restartApp()` calls the native `OTARestart.restartApp()` module when it is available.
@@ -581,6 +562,23 @@ ota/backup/
 ```
 
 is automatically restored.
+
+## Automatic Rollback
+
+If an OTA bundle:
+
+- fails hash validation
+- crashes during recovery
+- is incomplete
+- is corrupted
+
+the package automatically restores:
+
+```text
+ota/backup/
+```
+
+without requiring user intervention.
 
 ### Assets Mapping
 
@@ -671,6 +669,25 @@ await runOTA({
 ```
 
 `shaHash` must be the ZIP hash (`zipHash`), while `bundleHash` must be the hash of `index.android.bundle`.
+
+## Example OTA Server Structure
+
+```text
+server/
+|-- ota-manifest.json
+`-- otaBundle.zip
+```
+
+Example manifest:
+
+```json
+{
+  "version": "5",
+  "url": "https://server.com/otaBundle.zip",
+  "zipHash": "...",
+  "bundleHash": "..."
+}
+```
 
 ## Version Checking
 
@@ -776,6 +793,33 @@ interface RunOTAResult {
 6. **Swap**: Atomically replaces the current bundle with the new one
 7. **Cleanup**: Removes temporary files and locks
 
+## OTA Flow
+
+```text
+Server
+  |
+  v
+Download ZIP
+  |
+  v
+SHA256 Validation
+  |
+  v
+Extract to staging/
+  |
+  v
+Validate bundle
+  |
+  v
+Backup current/
+  |
+  v
+Swap current bundle
+  |
+  v
+Restart app
+```
+
 ## Directory Structure
 
 The package creates the following directory structure in the app's document directory:
@@ -811,6 +855,17 @@ The package provides clear error messages for common issues:
 - Use proper authentication for your update server
 - Consider code signing for additional security
 
+## Security Model
+
+The package validates:
+
+- OTA ZIP SHA256
+- extracted bundle SHA256
+
+before activation.
+
+Corrupted or tampered bundles are rejected automatically.
+
 ## Release Build Testing
 
 OTA updates only work correctly in release builds.
@@ -840,6 +895,55 @@ OTA updates CANNOT update:
 - Gradle dependencies
 - Kotlin/Java/Swift/Obj-C code
 
+## OTA Safety Warning
+
+Never deliver OTA updates across incompatible native versions.
+
+Example:
+
+- App binary contains native module v1
+- OTA JS expects native module v2
+
+This can crash the app.
+
+Always scope OTA updates using:
+
+- app version
+- build number
+- native compatibility
+
+## Recommended OTA Strategy
+
+Always scope OTA updates by:
+
+- app version
+- native version
+- build number
+
+Never deliver OTA updates across incompatible native binaries.
+
+## Recommended Production Setup
+
+Recommended:
+
+```properties
+newArchEnabled=true
+hermesEnabled=true
+```
+
+Hermes is strongly recommended for production OTA updates.
+
+## Production Recommendations
+
+Recommended:
+
+- Hermes enabled
+- release builds only
+- HTTPS update delivery
+- CDN hosting
+- OTA version pinning
+- staged rollout
+
 ## Common Crash
 
 If you see:
@@ -854,9 +958,18 @@ or:
 ReactInstanceManager.createReactContext is unsupported
 ```
 
-you are likely using the `ReactNativeHost` setup inside a New Architecture app.
+it usually means:
 
-Switch to the `ReactHost` integration.
+- `reactHost` integration was removed
+- RN template setup was modified incorrectly
+- startup initialization was bypassed
+
+Keep BOTH:
+
+- `reactNativeHost`
+- `reactHost`
+
+from the generated RN template.
 
 ## Best Practices
 
@@ -875,13 +988,24 @@ Switch to the `ReactHost` integration.
 - OTA updates cannot modify native dependencies
 - OTA updates should not change TurboModule/Fabric native implementations
 
+## Comparison
+
+| Feature              | rn-ota-updater | CodePush |
+| -------------------- | -------------- | -------- |
+| Self-hosted          | Yes            | Optional |
+| New Architecture     | Yes            | Partial  |
+| Bridgeless           | Designed       | Limited  |
+| Asset OTA            | Yes            | Yes      |
+| Open Source          | Yes            | Yes      |
+| AppCenter dependency | No             | Yes      |
+
 ## Supported Versions
 
-| rn-ota-updater | React Native |
-| --------------- | ------------- |
-| 1.x             | 0.70+         |
-| 1.x             | 0.76+ New Architecture |
-| 1.x             | Bridgeless mode |
+| rn-ota-updater | RN Version | Architecture |
+| -------------- | ---------- | ------------ |
+| 1.x            | 0.70-0.75  | Old          |
+| 1.x            | 0.76+      | New          |
+| 1.x            | 0.79+      | Bridgeless   |
 
 ## Tested With
 
@@ -905,6 +1029,28 @@ npx react-native doctor
 ```
 
 to verify your React Native environment setup.
+
+## FAQ
+
+### Why doesn't OTA work in debug mode?
+
+Metro overrides JS bundle loading in debug builds. Test OTA updates in release builds.
+
+### Can OTA update native modules?
+
+No. OTA updates should only ship JavaScript, UI, business logic, and assets.
+
+### Does this support Fabric?
+
+Yes. Keep the generated RN template structure and inject OTA through `getJSBundleFile()`.
+
+### Does this support Bridgeless?
+
+It is designed for RN 0.76+ Bridgeless mode. Test your release APK, cold restart, and process-death relaunch before production rollout.
+
+### Can I use this with Expo?
+
+No. Expo managed workflow is not supported because OTA bundle injection requires native Android integration.
 
 ## Contributing
 
