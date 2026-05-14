@@ -54,8 +54,8 @@ const applyOTABundle = async (bundle) => {
     try {
         await RNFS.mkdir(constants_1.OTA_ROOT);
         // clear leftovers from previous attempts, then create the crash-recovery lock
-        await (0, exports.cleanupOTA)();
         await RNFS.writeFile(constants_1.OTA_LOCK, '1');
+        await (0, exports.cleanupOTA)();
         if (bundle.sizeBytes) {
             await (0, fileSystem_1.ensureDiskSpace)(bundle.sizeBytes);
         }
@@ -79,8 +79,10 @@ const applyOTABundle = async (bundle) => {
         await (0, validate_1.validateStaging)(bundle.bundleHash);
         // write hash.txt for native cold-start verification
         const bundlePath = `${constants_1.OTA_STAGING}/${constants_1.BUNDLE_NAME}`;
-        const bundleHash = bundle.bundleHash || (await (0, fileSystem_1.computeSHA256)(bundlePath));
-        await RNFS.writeFile(`${constants_1.OTA_STAGING}/hash.txt`, bundleHash, 'utf8');
+        const hashToWrite = bundle.bundleHash
+            ? bundle.bundleHash
+            : await (0, fileSystem_1.computeSHA256)(bundlePath); // Compute if not provided
+        await RNFS.writeFile(`${constants_1.OTA_STAGING}/hash.txt`, hashToWrite, 'utf8');
         // swap
         await atomicSwap();
         await (0, exports.cleanupOTA)();
