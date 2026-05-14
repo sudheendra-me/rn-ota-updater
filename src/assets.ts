@@ -58,6 +58,7 @@ let validAssetSet: Set<string> = new Set();
 
 let isLoaded = false;
 let isPatched = false;
+let originalResolveAssetSource: ((source: any) => any) | undefined;
 let resolutionLogCount = 0;
 
 // -------------------- HELPERS --------------------
@@ -121,7 +122,6 @@ const buildValidAssetSet = async () => {
   );
 };
 
-
 const findAssetKeyForUri = (uri: string): string | undefined => {
   const clean = normalizeUri(uri);
 
@@ -149,6 +149,7 @@ const logAssetResolution = (
   matchKey?: string,
   didHit?: boolean,
 ) => {
+  if (!__DEV__) return;
   if (resolutionLogCount >= RESOLUTION_LOG_LIMIT) return;
 
   console.log("[OTA]", {
@@ -171,6 +172,7 @@ const patchResolveAssetSource = () => {
 
   const original = Image.resolveAssetSource;
   if (!original) return;
+  originalResolveAssetSource = original;
 
   Image.resolveAssetSource = (source: any) => {
     const resolved = original(source);
@@ -204,7 +206,9 @@ const patchResolveAssetSource = () => {
 
 const attachTransformer = () => {
   if (typeof setCustomSourceTransformer !== "function") {
-    console.log("[OTA] transformer not available", assetTransformerLoadError);
+    if (__DEV__) {
+      console.log("[OTA] transformer not available", assetTransformerLoadError);
+    }
     return;
   }
 
@@ -236,7 +240,9 @@ export const initOtaAssets = async (): Promise<void> => {
   try {
     const exists = await RNFS.exists(OTA_ASSETS_MAP);
     if (!exists) {
-      console.log("[OTA] assets.json not found");
+      if (__DEV__) {
+        console.log("[OTA] assets.json not found");
+      }
       // STILL patch so future loads work
       patchResolveAssetSource();
       isLoaded = true;
@@ -248,7 +254,9 @@ export const initOtaAssets = async (): Promise<void> => {
     buildAssetIndexes();
     await buildValidAssetSet();
 
-    console.log("[OTA] Loaded assets:", validAssetSet.size);
+    if (__DEV__) {
+      console.log("[OTA] Loaded assets:", validAssetSet.size);
+    }
 
     // Try transformer (optional)
     attachTransformer();
@@ -258,7 +266,9 @@ export const initOtaAssets = async (): Promise<void> => {
 
     isLoaded = true;
   } catch (e) {
-    console.log("[OTA] init failed", e);
+    if (__DEV__) {
+      console.log("[OTA] init failed", e);
+    }
   }
 };
 
@@ -269,9 +279,14 @@ export const clearOtaAssetsMap = () => {
   assetKeys = [];
   fileNameIndex = {};
   validAssetSet = new Set();
-
   isLoaded = false;
+  isPatched = false;
   resolutionLogCount = 0;
+
+  if (originalResolveAssetSource && Image) {
+    Image.resolveAssetSource = originalResolveAssetSource;
+    originalResolveAssetSource = undefined;
+  }
 };
 
 export const getOtaAssetsMap = () => ({ ...assetsMap });

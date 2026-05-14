@@ -127,6 +127,38 @@ You do NOT need to disable:
 newArchEnabled=true
 ```
 
+## Important
+
+React Native templates differ across versions.
+
+Always start from the generated `MainApplication.kt` from your React Native project.
+
+Do NOT fully copy-paste the README example file.
+
+Only:
+
+- add OTA helper methods
+- add `getJSBundleFile()`
+
+Keep the rest of the generated template unchanged.
+
+## React Native 0.79+
+
+RN 0.79 templates may no longer expose:
+
+```kotlin
+isNewArchEnabled()
+isHermesEnabled()
+```
+
+inside `DefaultReactNativeHost`.
+
+Keep the generated template from your RN version and only inject OTA bundle loading through:
+
+```kotlin
+getJSBundleFile()
+```
+
 ## React Native Version Compatibility
 
 | React Native | Architecture     | Supported |
@@ -138,7 +170,7 @@ newArchEnabled=true
 
 ## Bridgeless Mode Support
 
-`rn-ota-updater` is designed to support React Native Bridgeless mode on RN 0.76+.
+`rn-ota-updater` is compatible with the RN 0.76+ architecture setup and designed to work with Bridgeless mode.
 
 OTA bundle injection is designed to work with:
 
@@ -189,18 +221,25 @@ This setup is designed to work with:
 - Hermes
 - Bridgeless mode on RN 0.76+
 
+## Minimal Required Integration
+
+The only required OTA injection point is:
+
+```kotlin
+override fun getJSBundleFile(): String? {
+  return if (!BuildConfig.DEBUG) {
+    getOtaBundlePath() ?: super.getJSBundleFile()
+  } else {
+    super.getJSBundleFile()
+  }
+}
+```
+
+inside your generated `reactNativeHost`.
+
+Keep the rest of your RN template unchanged.
+
 The exact `MainApplication.kt` template differs slightly between RN versions. Keep the default generated structure from your RN template and only add the OTA helper functions plus the `getJSBundleFile()` override shown below.
-
-Always start from the generated React Native template for your RN version.
-
-Do not fully replace your existing `MainApplication.kt`.
-
-Only:
-
-- add OTA helper functions
-- add the `getJSBundleFile()` override
-
-Keep the rest of the generated RN template intact.
 
 `getJSBundleFile()` is ignored in debug builds because Metro serves the JS bundle directly.
 
@@ -257,7 +296,9 @@ class MainApplication : Application(), ReactApplication {
     // Recover backup if needed
     if (!currentDir.exists() && backupDir.exists()) {
       Log.w("OTA", "Recovering OTA backup")
-      backupDir.renameTo(currentDir)
+      if (!backupDir.renameTo(currentDir)) {
+        Log.e("OTA", "Failed to restore OTA backup")
+      }
     }
 
     // No OTA available
@@ -285,13 +326,17 @@ class MainApplication : Application(), ReactApplication {
         currentDir.deleteRecursively()
 
         if (backupDir.exists()) {
-          backupDir.renameTo(currentDir)
-          val recovered = File(currentDir, "index.android.bundle")
-
-          if (recovered.exists()) {
-            recovered.absolutePath
-          } else {
+          if (!backupDir.renameTo(currentDir)) {
+            Log.e("OTA", "Failed to restore OTA backup")
             null
+          } else {
+            val recovered = File(currentDir, "index.android.bundle")
+
+            if (recovered.exists()) {
+              recovered.absolutePath
+            } else {
+              null
+            }
           }
         } else {
           null
@@ -303,7 +348,7 @@ class MainApplication : Application(), ReactApplication {
     }
   }
 
-  // REQUIRED FOR RN 0.76+
+  // React Native Host
   override val reactNativeHost: ReactNativeHost =
     object : DefaultReactNativeHost(this) {
 
@@ -315,12 +360,6 @@ class MainApplication : Application(), ReactApplication {
       override fun getJSMainModuleName(): String = "index"
 
       override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
-
-      override fun isNewArchEnabled(): Boolean =
-        BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
-
-      override fun isHermesEnabled(): Boolean =
-        BuildConfig.IS_HERMES_ENABLED
 
       // OTA Injection
       override fun getJSBundleFile(): String? {
@@ -335,8 +374,8 @@ class MainApplication : Application(), ReactApplication {
   // NEW ARCHITECTURE HOST
   override val reactHost: ReactHost by lazy {
     getDefaultReactHost(
-      context = applicationContext,
-      reactNativeHost = reactNativeHost
+      applicationContext,
+      reactNativeHost
     )
   }
 
@@ -355,6 +394,41 @@ class MainApplication : Application(), ReactApplication {
 </details>
 
 If your generated RN template differs, keep the generated `reactNativeHost`, `reactHost`, `SoLoader.init(...)`, and `load()` structure. Only add the OTA helper functions and the `getJSBundleFile()` override.
+
+### Important React Native Template Differences
+
+React Native templates differ slightly across versions.
+
+Some RN templates expose:
+
+```kotlin
+override fun isNewArchEnabled()
+override fun isHermesEnabled()
+```
+
+inside `DefaultReactNativeHost`, while others do not.
+
+If your project shows:
+
+```text
+'override fun isNewArchEnabled()' overrides nothing
+```
+
+or:
+
+```text
+'override fun isHermesEnabled()' overrides nothing
+```
+
+simply remove those overrides.
+
+The OTA integration only requires:
+
+```kotlin
+override fun getJSBundleFile(): String?
+```
+
+inside `reactNativeHost`.
 
 ### Why This Setup Works
 
@@ -403,7 +477,7 @@ Do NOT:
 - remove `reactNativeHost`
 - remove `reactHost`
 - remove `load()`
-- remove the generated `isNewArchEnabled()` / `isHermesEnabled()` declarations
+- manually add or remove architecture methods unless your RN template requires it
 
 Doing so may break:
 
@@ -461,9 +535,10 @@ import { OTARestart, runOTA } from "rn-ota-updater";
 
 const updateBundle = {
   url: "https://your-server.com/updates/update.zip",
+  version: "2", // Required by OTABundle type
   shaHash: "abc123...", // SHA256 hash of the ZIP file
   bundleHash: "def456...", // SHA256 hash of the bundle (optional)
-  sizeBytes: 1024000, // Size in bytes (optional)
+  sizeBytes: 10240, // Size in bytes (optional)
 };
 
 const result = await runOTA(updateBundle);
@@ -729,6 +804,18 @@ Applies an OTA update.
 
 - `Promise<RunOTAResult>`: Result object with update/reload status and error information
 
+### `applyOTABundle(bundle: OTABundle): Promise<OTAResult>`
+
+Low-level update primitive used by `runOTA()`.
+
+Most apps should call `runOTA()` instead. Use this only if you are building custom update orchestration and will handle reload behavior yourself.
+
+### `cleanupOTA(): Promise<void>`
+
+Advanced cleanup helper for temporary OTA files.
+
+Do not call this during an active update. Calling it at the wrong time can remove staging files or recovery locks.
+
 ### `reloadApp(packageName?: string): void`
 
 Reloads the app after an OTA update. In development this uses React Native `DevSettings.reload()`. In production Android this calls the native `OTARestart.restartApp()` module included in this package. When `packageName` is omitted, Android restarts the current app package.
@@ -911,6 +998,12 @@ Always scope OTA updates using:
 - app version
 - build number
 - native compatibility
+
+## Critical Production Rule
+
+Never ship OTA updates that require new native code.
+
+OTA updates must remain compatible with the installed app binary.
 
 ## Recommended OTA Strategy
 
