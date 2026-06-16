@@ -1,7 +1,6 @@
 type SourceTransformerSetter = (transformer: (resolver: any) => any) => void;
 
 let setCustomSourceTransformer: SourceTransformerSetter | undefined;
-let assetTransformerLoadError: unknown;
 
 // Peer deps
 let RNFS: typeof import("react-native-fs");
@@ -19,7 +18,13 @@ try {
     resolveAssetSource?.setCustomSourceTransformer ||
     defaultExport?.setCustomSourceTransformer;
 } catch (e) {
-  assetTransformerLoadError = e;
+  // ignore
+  if (__DEV__) {
+    console.warn(
+      "[rn-ota-updater] Failed to resolve Asset Source OTA",
+      e,
+    );
+  }
 }
 
 try {
@@ -47,8 +52,6 @@ const OTA_DIR = `${RNFS.DocumentDirectoryPath}/ota/current`;
 const OTA_ASSETS_DIR = `${OTA_DIR}/assets`;
 const OTA_ASSETS_MAP = `${OTA_DIR}/assets.json`;
 
-const RESOLUTION_LOG_LIMIT = 40;
-
 // -------------------- STATE --------------------
 
 let assetsMap: Record<string, any> = {};
@@ -59,7 +62,6 @@ let validAssetSet: Set<string> = new Set();
 let isLoaded = false;
 let isPatched = false;
 let originalResolveAssetSource: ((source: any) => any) | undefined;
-let resolutionLogCount = 0;
 
 // -------------------- HELPERS --------------------
 
@@ -141,28 +143,7 @@ const findAssetKeyForUri = (uri: string): string | undefined => {
     if (fileNameIndex[noScale]) return fileNameIndex[noScale];
   }
 
-  return undefined; // ✅ important
-};
-
-const logAssetResolution = (
-  uri: string,
-  matchKey?: string,
-  didHit?: boolean,
-) => {
-  if (!__DEV__) return;
-  if (resolutionLogCount >= RESOLUTION_LOG_LIMIT) return;
-
-  console.log("[OTA]", {
-    uri,
-    match: matchKey || null,
-    valid: matchKey ? validAssetSet.has(matchKey) : false,
-  });
-
-  if (didHit && matchKey) {
-    console.log("[OTA HIT]", `file://${OTA_ASSETS_DIR}/${matchKey}`);
-  }
-
-  resolutionLogCount++;
+  return undefined; 
 };
 
 // -------------------- CORE PATCH --------------------
@@ -180,13 +161,9 @@ const patchResolveAssetSource = () => {
     try {
       if (!resolved?.uri) return resolved;
 
-      const uri = resolved.uri;
-      const matchKey = findAssetKeyForUri(uri);
-      const didHit = Boolean(matchKey && validAssetSet.has(matchKey));
+      const matchKey = findAssetKeyForUri(resolved.uri);
 
-      logAssetResolution(uri, matchKey, didHit);
-
-      if (didHit && matchKey) {
+      if (matchKey && validAssetSet.has(matchKey)) {
         return {
           ...resolved,
           uri: `file://${OTA_ASSETS_DIR}/${matchKey}`,
@@ -206,9 +183,6 @@ const patchResolveAssetSource = () => {
 
 const attachTransformer = () => {
   if (typeof setCustomSourceTransformer !== "function") {
-    if (__DEV__) {
-      console.log("[OTA] transformer not available", assetTransformerLoadError);
-    }
     return;
   }
 
@@ -217,17 +191,13 @@ const attachTransformer = () => {
     if (!asset?.uri) return asset;
 
     const matchKey = findAssetKeyForUri(asset.uri);
-    const didHit = Boolean(matchKey && validAssetSet.has(matchKey));
 
-    logAssetResolution(asset.uri, matchKey, didHit);
-
-    if (didHit && matchKey) {
+    if (matchKey && validAssetSet.has(matchKey)) {
       return {
         ...asset,
         uri: `file://${OTA_ASSETS_DIR}/${matchKey}`,
       };
     }
-
     return asset;
   });
 };
@@ -240,9 +210,6 @@ export const initOtaAssets = async (): Promise<void> => {
   try {
     const exists = await RNFS.exists(OTA_ASSETS_MAP);
     if (!exists) {
-      if (__DEV__) {
-        console.log("[OTA] assets.json not found");
-      }
       // STILL patch so future loads work
       patchResolveAssetSource();
       isLoaded = true;
@@ -254,10 +221,6 @@ export const initOtaAssets = async (): Promise<void> => {
     buildAssetIndexes();
     await buildValidAssetSet();
 
-    if (__DEV__) {
-      console.log("[OTA] Loaded assets:", validAssetSet.size);
-    }
-
     // Try transformer (optional)
     attachTransformer();
 
@@ -266,9 +229,7 @@ export const initOtaAssets = async (): Promise<void> => {
 
     isLoaded = true;
   } catch (e) {
-    if (__DEV__) {
-      console.log("[OTA] init failed", e);
-    }
+    if(__DEV__) console.warn("[rn-ota-updater] Failed to initialize OTA assets", e);
   }
 };
 
@@ -281,7 +242,6 @@ export const clearOtaAssetsMap = () => {
   validAssetSet = new Set();
   isLoaded = false;
   isPatched = false;
-  resolutionLogCount = 0;
 
   if (originalResolveAssetSource && Image) {
     Image.resolveAssetSource = originalResolveAssetSource;
