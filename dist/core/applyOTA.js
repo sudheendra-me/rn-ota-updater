@@ -163,7 +163,7 @@ const getMetadata = async () => {
         const content = await RNFS.readFile(metadataPath, 'utf8');
         const metadata = JSON.parse(content);
         // Validate metadata structure
-        if (!metadata.version || !metadata.bundleHash || !metadata.zipHash) {
+        if (!metadata.version || !metadata.zipHash) {
             console.warn('📦 Incomplete metadata found');
             return null;
         }

@@ -1,4 +1,3 @@
-Here's the complete, production-ready README.md file for your `rn-ota-updater` library. You can copy and paste this directly:
 
 ```markdown
 # rn-ota-updater
