@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.applyOTABundle = exports.cleanupOTA = void 0;
+exports.getCurrentBundleMetadata = exports.getCurrentBundleVersion = exports.getMetadata = exports.applyOTABundle = exports.cleanupOTA = void 0;
 const react_native_1 = require("react-native");
 // @ts-ignore - react-native-fs is a peerDependency
 let RNFS;
@@ -23,85 +23,186 @@ catch (e) {
 const constants_1 = require("./constants");
 const fileSystem_1 = require("./fileSystem");
 const validate_1 = require("./validate");
-// cleanup
+// ===== CLEANUP =====
 const cleanupOTA = async () => {
     await (0, fileSystem_1.safeUnlink)(constants_1.OTA_ZIP);
-    await (0, fileSystem_1.safeUnlink)(constants_1.OTA_LOCK);
     await (0, fileSystem_1.safeUnlink)(constants_1.OTA_STAGING);
+    // DO NOT delete OTA_LOCK here
 };
 exports.cleanupOTA = cleanupOTA;
-// atomic swap
+const installedAt = Date.now();
+// ===== ATOMIC SWAP =====
 const atomicSwap = async () => {
+    // Remove old backup if exists
     if (await (0, fileSystem_1.exists)(constants_1.OTA_BACKUP)) {
         await (0, fileSystem_1.safeUnlink)(constants_1.OTA_BACKUP);
     }
+    // Move current to backup
     if (await (0, fileSystem_1.exists)(constants_1.OTA_CURRENT)) {
         await RNFS.moveFile(constants_1.OTA_CURRENT, constants_1.OTA_BACKUP);
     }
-    await RNFS.mkdir(constants_1.OTA_CURRENT);
-    await RNFS.moveFile(`${constants_1.OTA_STAGING}/${constants_1.BUNDLE_NAME}`, `${constants_1.OTA_CURRENT}/${constants_1.BUNDLE_NAME}`);
-    await RNFS.moveFile(`${constants_1.OTA_STAGING}/hash.txt`, `${constants_1.OTA_CURRENT}/hash.txt`);
-    await RNFS.moveFile(`${constants_1.OTA_STAGING}/${constants_1.ASSETS_JSON}`, `${constants_1.OTA_CURRENT}/${constants_1.ASSETS_JSON}`);
-    if (await (0, fileSystem_1.exists)(`${constants_1.OTA_STAGING}/assets`)) {
-        await RNFS.moveFile(`${constants_1.OTA_STAGING}/assets`, `${constants_1.OTA_CURRENT}/assets`);
-    }
+    // Move staging to current
+    await RNFS.moveFile(constants_1.OTA_STAGING, constants_1.OTA_CURRENT);
 };
-// main
+// ===== CREATE METADATA =====
+const createMetadata = async (stagingPath, bundle, bundleHash, zipHash) => {
+    const metadata = {
+        version: bundle.version,
+        bundleHash: bundleHash,
+        zipHash: zipHash,
+        installedAt: installedAt,
+        bundleSize: bundle.sizeBytes || 0,
+    };
+    await RNFS.writeFile(`${stagingPath}/metadata.json`, JSON.stringify(metadata, null, 2), 'utf8');
+    console.log('📦 Metadata created:', metadata);
+};
+// ===== MAIN APPLY FUNCTION =====
 const applyOTABundle = async (bundle) => {
     if (react_native_1.Platform.OS !== 'android') {
         return { onSuccess: false, error: 'Unsupported platform' };
     }
+    let createdMetadata = null;
     try {
+        // Ensure OTA root exists
         await RNFS.mkdir(constants_1.OTA_ROOT);
-        // clear leftovers from previous attempts, then create the crash-recovery lock
+        // Clean up previous download and staging files
+        await (0, fileSystem_1.safeUnlink)(constants_1.OTA_ZIP);
+        await (0, fileSystem_1.safeUnlink)(constants_1.OTA_STAGING);
+        // Create lock file AFTER cleanup
         await RNFS.writeFile(constants_1.OTA_LOCK, '1');
-        await (0, exports.cleanupOTA)();
+        // Check disk space
         if (bundle.sizeBytes) {
             await (0, fileSystem_1.ensureDiskSpace)(bundle.sizeBytes);
         }
-        // download
+        // Download
         const res = await RNFS.downloadFile({
             fromUrl: bundle.url,
             toFile: constants_1.OTA_ZIP,
         }).promise;
         if (res.statusCode !== 200) {
-            throw new Error('Download failed');
+            throw new Error(`Download failed with status ${res.statusCode}`);
         }
-        // verify zip
+        // Verify zip hash
         const zipHash = await (0, fileSystem_1.computeSHA256)(constants_1.OTA_ZIP);
         if (zipHash.toLowerCase() !== bundle.shaHash.toLowerCase()) {
             throw new Error('ZIP hash mismatch');
         }
-        // unzip
+        // Unzip
         await (0, fileSystem_1.safeUnlink)(constants_1.OTA_STAGING);
         await unzip(constants_1.OTA_ZIP, constants_1.OTA_STAGING);
-        // validate
+        // Validate staging contents
         await (0, validate_1.validateStaging)(bundle.bundleHash);
-        // write hash.txt for native cold-start verification
+        // Compute or use provided bundle hash
         const bundlePath = `${constants_1.OTA_STAGING}/${constants_1.BUNDLE_NAME}`;
-        const hashToWrite = bundle.bundleHash
+        const bundleHash = bundle.bundleHash
             ? bundle.bundleHash
-            : await (0, fileSystem_1.computeSHA256)(bundlePath); // Compute if not provided
-        await RNFS.writeFile(`${constants_1.OTA_STAGING}/hash.txt`, hashToWrite, 'utf8');
-        // swap
+            : await (0, fileSystem_1.computeSHA256)(bundlePath);
+        // Write hash.txt for native verification
+        await RNFS.writeFile(`${constants_1.OTA_STAGING}/hash.txt`, bundleHash, 'utf8');
+        // Create metadata.json
+        await createMetadata(constants_1.OTA_STAGING, bundle, bundleHash, zipHash);
+        // Store metadata for result
+        createdMetadata = {
+            version: bundle.version,
+            bundleHash: bundleHash,
+            zipHash: zipHash,
+            installedAt: installedAt,
+            bundleSize: bundle.sizeBytes || 0,
+        };
+        // Atomic swap
         await atomicSwap();
+        // Cleanup temporary files
         await (0, exports.cleanupOTA)();
-        return { onSuccess: true };
+        // Remove lock only on success
+        await (0, fileSystem_1.safeUnlink)(constants_1.OTA_LOCK);
+        return {
+            onSuccess: true,
+            metadata: createdMetadata,
+        };
     }
     catch (e) {
-        // rollback
-        if (await (0, fileSystem_1.exists)(constants_1.OTA_BACKUP)) {
-            if (await (0, fileSystem_1.exists)(constants_1.OTA_CURRENT)) {
-                await (0, fileSystem_1.safeUnlink)(constants_1.OTA_CURRENT);
+        console.error('📦 OTA update failed:', e.message);
+        // Rollback on failure
+        try {
+            if (await (0, fileSystem_1.exists)(constants_1.OTA_BACKUP)) {
+                if (await (0, fileSystem_1.exists)(constants_1.OTA_CURRENT)) {
+                    await (0, fileSystem_1.safeUnlink)(constants_1.OTA_CURRENT);
+                }
+                await RNFS.moveFile(constants_1.OTA_BACKUP, constants_1.OTA_CURRENT);
+                console.log('📦 Rollback successful');
             }
-            await RNFS.moveFile(constants_1.OTA_BACKUP, constants_1.OTA_CURRENT);
         }
+        catch (rollbackError) {
+            console.error('📦 Rollback failed:', rollbackError);
+        }
+        // Cleanup temporary files
         await (0, exports.cleanupOTA)();
-        return { onSuccess: false, error: e.message };
-    }
-    finally {
+        // Remove lock even on failure
         await (0, fileSystem_1.safeUnlink)(constants_1.OTA_LOCK);
+        return {
+            onSuccess: false,
+            error: e.message || 'Unknown error occurred',
+        };
     }
 };
 exports.applyOTABundle = applyOTABundle;
+// ===== METADATA READER =====
+const getMetadata = async () => {
+    const metadataPath = `${constants_1.OTA_CURRENT}/metadata.json`;
+    try {
+        const metadataExists = await (0, fileSystem_1.exists)(metadataPath);
+        if (!metadataExists) {
+            // Try backup if current doesn't exist
+            const backupPath = `${constants_1.OTA_BACKUP}/metadata.json`;
+            if (await (0, fileSystem_1.exists)(backupPath)) {
+                const content = await RNFS.readFile(backupPath, 'utf8');
+                return JSON.parse(content);
+            }
+            return null;
+        }
+        const content = await RNFS.readFile(metadataPath, 'utf8');
+        const metadata = JSON.parse(content);
+        // Validate metadata structure
+        if (!metadata.version || !metadata.bundleHash || !metadata.zipHash) {
+            console.warn('📦 Incomplete metadata found');
+            return null;
+        }
+        return metadata;
+    }
+    catch (error) {
+        console.error('📦 Failed to read metadata:', error);
+        return null;
+    }
+};
+exports.getMetadata = getMetadata;
+// ===== PUBLIC API =====
+/**
+ * Get the current OTA bundle version
+ * Returns '0' if no OTA is installed
+ */
+const getCurrentBundleVersion = async () => {
+    try {
+        const metadata = await (0, exports.getMetadata)();
+        return metadata ? String(metadata.version) : '0';
+    }
+    catch (error) {
+        console.error('[rn-ota-updater] Failed to get version:', error);
+        return '0';
+    }
+};
+exports.getCurrentBundleVersion = getCurrentBundleVersion;
+/**
+ * Get detailed OTA metadata
+ * Returns null if no OTA is installed
+ */
+const getCurrentBundleMetadata = async () => {
+    try {
+        return await (0, exports.getMetadata)();
+    }
+    catch (error) {
+        console.error('[rn-ota-updater] Failed to get metadata:', error);
+        return null;
+    }
+};
+exports.getCurrentBundleMetadata = getCurrentBundleMetadata;
 //# sourceMappingURL=applyOTA.js.map

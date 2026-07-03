@@ -1,11 +1,26 @@
+// Core OTA functions
+export {
+  applyOTABundle,
+  cleanupOTA,
+  getCurrentBundleVersion,
+  getCurrentBundleMetadata,
+  getMetadata,
+} from './core/applyOTA';
+
+// Runtime functions
 export {runOTA} from './runOTA';
 export {OTARestart, reloadApp} from './reloadApp';
-export {applyOTABundle,cleanupOTA} from './core/applyOTA';
+
+// Recovery
 export {recoverIfNeeded} from './recovery/recover';
+
+// Assets management
 export {
   initOtaAssets,
   loadOtaAssetsMap,
   clearOtaAssetsMap,
   getOtaAssetsMap,
 } from './assets';
+
+// Types
 export * from './types/ota';

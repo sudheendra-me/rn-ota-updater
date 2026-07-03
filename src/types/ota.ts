@@ -9,9 +9,18 @@ export type OTABundle = {
   restartPackageName?: string;
 };
 
+export interface OTAMetadata {
+  version: string | number;
+  bundleHash: string;
+  zipHash: string;
+  installedAt: number; // timestamp
+  bundleSize: number;
+}
+
 export type OTAResult = {
   onSuccess: boolean;
   error?: string;
+  metadata?: OTAMetadata;
 };
 
 export type RunOTAResult = {
@@ -19,3 +28,8 @@ export type RunOTAResult = {
   reloadRequired: boolean;
   error?: string;
 };
+
+export interface OTARestartOptions {
+  packageName?: string;
+  delayMs?: number;
+}

@@ -1,3 +1,6 @@
+Here's the complete, production-ready README.md file for your `rn-ota-updater` library. You can copy and paste this directly:
+
+```markdown
 # rn-ota-updater
 
 A React Native library for implementing Over-The-Air (OTA) updates with custom update delivery. This package allows you to download, validate, and apply updates to your React Native application without going through the App Store or Play Store.
@@ -9,6 +12,7 @@ A React Native library for implementing Over-The-Air (OTA) updates with custom u
 - 📱 **Android Support**: Supports React Native 0.70+ including New Architecture (Fabric/TurboModules)
 - 🔄 **Atomic Updates**: Rollback capability with backup system
 - 🛡️ **Error Recovery**: Automatic recovery from failed updates
+- 📊 **Rich Metadata**: Track version, hashes, installation timestamps, and bundle size
 - 🎨 **Assets Mapping**: Automatic asset resolution for updated images and static files
 - 📦 **Peer Dependencies**: No bundled native modules - you control the versions
 
@@ -20,13 +24,13 @@ npm install rn-ota-updater
 
 ## Quick Start
 
-### 1. Install
+### 1. Install Dependencies
 
 ```bash
 npm install rn-ota-updater react-native-fs react-native-zip-archive
 ```
 
-### 2. Add OTA bundle injection
+### 2. Add OTA Bundle Injection
 
 Inside `MainApplication.kt`, keep your generated RN template and add the OTA fallback inside `reactNativeHost`:
 
@@ -40,24 +44,38 @@ override fun getJSBundleFile(): String? {
 }
 ```
 
-### 3. Initialize on app startup
+### 3. Initialize on App Startup
 
 ```typescript
-import {recoverIfNeeded, loadOtaAssetsMap} from 'rn-ota-updater';
+import { recoverIfNeeded, loadOtaAssetsMap } from 'rn-ota-updater';
 
-await recoverIfNeeded();
-await loadOtaAssetsMap();
+async function bootstrap() {
+  await recoverIfNeeded();
+  await loadOtaAssetsMap();
+}
+
+bootstrap();
 ```
 
-### 4. Apply OTA update
+### 4. Apply OTA Update
 
 ```typescript
-import {OTARestart, runOTA} from 'rn-ota-updater';
+import { runOTA, getCurrentBundleVersion } from 'rn-ota-updater';
 
-const result = await runOTA(update);
+const currentVersion = await getCurrentBundleVersion();
+console.log('Current OTA version:', currentVersion);
 
-if (result.reloadRequired) {
-  OTARestart.restartApp();
+const result = await runOTA({
+  url: 'https://your-server.com/updates/update.zip',
+  version: '2',
+  shaHash: 'abc123...',
+  bundleHash: 'def456...',
+  sizeBytes: 10240,
+  autoReload: true,
+});
+
+if (result.updated) {
+  console.log('Update applied successfully!');
 }
 ```
 
@@ -102,7 +120,7 @@ React Native `0.76+` templates commonly include both:
 
 inside `MainApplication.kt`.
 
-Do NOT remove the generated `reactNativeHost` from newer React Native templates.
+Do **NOT** remove the generated `reactNativeHost` from newer React Native templates.
 
 The correct approach is:
 
@@ -121,7 +139,7 @@ This setup supports:
 - TurboModules
 - Bridgeless mode on RN 0.76+
 
-You do NOT need to disable:
+You do **NOT** need to disable:
 
 ```properties
 newArchEnabled=true
@@ -133,12 +151,12 @@ React Native templates differ across versions.
 
 Always start from the generated `MainApplication.kt` from your React Native project.
 
-Do NOT fully copy-paste the README example file.
+Do **NOT** fully copy-paste the README example file.
 
 Only:
 
-- add OTA helper methods
-- add `getJSBundleFile()`
+- Add OTA helper methods
+- Add `getJSBundleFile()`
 
 Keep the rest of the generated template unchanged.
 
@@ -192,34 +210,15 @@ This package currently supports React Native CLI projects only.
 
 Expo managed workflow is not supported because OTA bundle injection requires native Android integration.
 
-### Install Peer Dependencies
+## Android Additional Setup
 
-```bash
-npm install react-native-fs react-native-zip-archive
-```
-
-### Android Additional Setup
-
-For Android, add this permission to your `android/app/src/main/AndroidManifest.xml`:
+Add this permission to your `android/app/src/main/AndroidManifest.xml`:
 
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
 ```
 
-Storage permissions are NOT required because OTA files are stored in app-private storage.
-
-### Correct MainApplication.kt Setup
-
-This setup is designed to work with:
-
-- RN 0.76+
-- RN 0.77+
-- RN 0.78+
-- RN 0.79+
-- Fabric
-- TurboModules
-- Hermes
-- Bridgeless mode on RN 0.76+
+Storage permissions are **NOT** required because OTA files are stored in app-private storage.
 
 ## Minimal Required Integration
 
@@ -472,7 +471,7 @@ still works correctly.
 
 ### Important
 
-Do NOT:
+Do **NOT**:
 
 - remove `reactNativeHost`
 - remove `reactHost`
@@ -518,7 +517,7 @@ React Native `0.76+` New Architecture templates still use `reactNativeHost` as c
 Call recovery first, then load the OTA assets map:
 
 ```typescript
-import {recoverIfNeeded, loadOtaAssetsMap} from 'rn-ota-updater';
+import { recoverIfNeeded, loadOtaAssetsMap } from 'rn-ota-updater';
 
 async function bootstrap() {
   await recoverIfNeeded();
@@ -528,25 +527,47 @@ async function bootstrap() {
 bootstrap();
 ```
 
+### Get Current OTA Version
+
+```typescript
+import { getCurrentBundleVersion, getCurrentBundleMetadata } from 'rn-ota-updater';
+
+// Get just the version
+const version = await getCurrentBundleVersion();
+console.log('Current OTA version:', version);
+
+// Get full metadata
+const metadata = await getCurrentBundleMetadata();
+if (metadata) {
+  console.log('Version:', metadata.version);
+  console.log('Installed at:', new Date(metadata.installedAt).toLocaleString());
+  console.log('Bundle size:', metadata.bundleSize, 'bytes');
+}
+```
+
 ### Basic Example
 
 ```typescript
-import { OTARestart, runOTA } from "rn-ota-updater";
+import { runOTA, getCurrentBundleVersion } from "rn-ota-updater";
+
+// Check current version
+const currentVersion = await getCurrentBundleVersion();
+console.log('Current version:', currentVersion);
 
 const updateBundle = {
   url: "https://your-server.com/updates/update.zip",
-  version: "2", // Required by OTABundle type
-  shaHash: "abc123...", // SHA256 hash of the ZIP file
-  bundleHash: "def456...", // SHA256 hash of the bundle (optional)
-  sizeBytes: 10240, // Size in bytes (optional)
+  version: "2",
+  shaHash: "abc123...",
+  bundleHash: "def456...",
+  sizeBytes: 10240,
+  autoReload: true,
 };
 
 const result = await runOTA(updateBundle);
 
-if (result.reloadRequired) {
-  OTARestart.restartApp();
+if (result.updated) {
+  console.log('Update applied successfully!');
 } else {
-  // Update failed
   console.error('Update failed:', result.error);
 }
 ```
@@ -565,31 +586,36 @@ Example server manifest:
 ### Production Update Check
 
 ```typescript
-import {OTARestart, runOTA} from 'rn-ota-updater';
+import { runOTA, getCurrentBundleVersion } from 'rn-ota-updater';
 
 const checkForUpdates = async () => {
+  const currentVersion = await getCurrentBundleVersion();
+  console.log('Current OTA version:', currentVersion);
+
   const response = await fetch(
     'https://your-server.com/ota-manifest.json',
   );
 
   const manifest = await response.json();
 
-  const result = await runOTA({
-    url: manifest.url,
-    version: manifest.version,
-    shaHash: manifest.zipHash,
-    bundleHash: manifest.bundleHash,
-  });
+  // Only update if server version is newer
+  if (parseInt(manifest.version) > parseInt(currentVersion)) {
+    const result = await runOTA({
+      url: manifest.url,
+      version: manifest.version,
+      shaHash: manifest.zipHash,
+      bundleHash: manifest.bundleHash,
+      autoReload: true,
+    });
 
-  if (result.reloadRequired) {
-    OTARestart.restartApp();
+    if (result.updated) {
+      console.log('Update applied successfully!');
+    }
+  } else {
+    console.log('Already on latest version');
   }
 };
 ```
-
-> In development, `OTARestart.restartApp()` uses `DevSettings.reload()` to force a reload from the current bundle.
->
-> In production on Android, `OTARestart.restartApp()` calls the native `OTARestart.restartApp()` module when it is available.
 
 ### Auto Reload
 
@@ -602,17 +628,9 @@ await runOTA({
 });
 ```
 
-By default, Android restarts the current app package automatically. If you need to restart a specific package, pass `restartPackageName`:
+By default, Android restarts the current app package automatically.
 
-```typescript
-await runOTA({
-  ...updateBundle,
-  autoReload: true,
-  restartPackageName: "com.yourcompany.yourapp",
-});
-```
-
-Use this only when it is safe to restart the app immediately. For payment, form, or other critical flows, prefer checking `result.reloadRequired` and calling `OTARestart.restartApp()` yourself.
+Use this only when it is safe to restart the app immediately. For payment, form, or other critical flows, prefer checking `result.updated` and calling `OTARestart.restartApp()` yourself.
 
 ### Android OTA Restart Module
 
@@ -766,35 +784,152 @@ Example manifest:
 
 ## Version Checking
 
-To prevent reapplying the same OTA version, you can check a local version file before processing an update. Example:
+The package provides built-in version checking through `getCurrentBundleVersion()`:
 
 ```typescript
-import RNFS from "react-native-fs";
+import { getCurrentBundleVersion } from "rn-ota-updater";
 
-const VERSION_FILE = `${RNFS.DocumentDirectoryPath}/ota/version.txt`;
+const currentVersion = await getCurrentBundleVersion();
+const newVersion = "5";
 
-const newVersion = "1";
-let lastVersion = null;
-const exists = await RNFS.exists(VERSION_FILE);
-if (exists) {
-  lastVersion = await RNFS.readFile(VERSION_FILE, "utf8");
+if (currentVersion === newVersion) {
+  console.log("Already up to date");
+  return;
 }
 
-console.log("[OTA] lastVersion:", lastVersion);
+// Apply update...
+```
 
-if (lastVersion === newVersion) {
-  console.log("[OTA] Already up to date");
-  return;
+For more detailed information, use `getCurrentBundleMetadata()`:
+
+```typescript
+import { getCurrentBundleMetadata } from "rn-ota-updater";
+
+const metadata = await getCurrentBundleMetadata();
+if (metadata) {
+  console.log('Version:', metadata.version);
+  console.log('Installed at:', new Date(metadata.installedAt).toISOString());
+  console.log('Bundle size:', metadata.bundleSize, 'bytes');
 }
 ```
 
-This ensures the update only runs when the stored OTA version differs from the incoming version.
+## Metadata API
+
+The package stores rich metadata about each OTA installation, making it easy to track versions, debug issues, and audit updates.
+
+### `getCurrentBundleVersion(): Promise<string>`
+
+Gets the current OTA bundle version. Returns `'0'` if no OTA is installed.
+
+```typescript
+import { getCurrentBundleVersion } from 'rn-ota-updater';
+
+const version = await getCurrentBundleVersion();
+console.log('Current OTA version:', version);
+```
+
+### `getCurrentBundleMetadata(): Promise<OTAMetadata | null>`
+
+Gets detailed metadata about the current OTA bundle.
+
+```typescript
+import { getCurrentBundleMetadata } from 'rn-ota-updater';
+
+const metadata = await getCurrentBundleMetadata();
+if (metadata) {
+  console.log('Version:', metadata.version);
+  console.log('Installed at:', new Date(metadata.installedAt).toISOString());
+  console.log('Bundle size:', metadata.bundleSize, 'bytes');
+}
+```
+
+### Metadata Structure
+
+```typescript
+interface OTAMetadata {
+  version: string | number;    // OTA version
+  bundleHash: string;          // SHA256 hash of the bundle
+  zipHash: string;             // SHA256 hash of the ZIP file
+  installedAt: number;         // Unix timestamp of installation
+  bundleSize: number;          // Bundle size in bytes
+}
+```
+
+### Example: Displaying OTA Version in App
+
+```typescript
+import { getCurrentBundleVersion, getCurrentBundleMetadata } from 'rn-ota-updater';
+import { useEffect, useState } from 'react';
+
+function AppInfo() {
+  const [otaInfo, setOtaInfo] = useState<{
+    version: string;
+    installedAt: string;
+  } | null>(null);
+
+  useEffect(() => {
+    async function loadOtaInfo() {
+      const version = await getCurrentBundleVersion();
+      const metadata = await getCurrentBundleMetadata();
+      
+      if (version !== '0') {
+        setOtaInfo({
+          version: version,
+          installedAt: metadata ? new Date(metadata.installedAt).toLocaleString() : 'Unknown',
+        });
+      }
+    }
+    loadOtaInfo();
+  }, []);
+
+  return (
+    <View>
+      <Text>App Version: 1.0.0</Text>
+      {otaInfo && (
+        <>
+          <Text>OTA Version: {otaInfo.version}</Text>
+          <Text>Installed: {otaInfo.installedAt}</Text>
+        </>
+      )}
+    </View>
+  );
+}
+```
+
+### Example: Version Check Before Update
+
+```typescript
+import { getCurrentBundleVersion, runOTA } from 'rn-ota-updater';
+
+async function checkForUpdates() {
+  const currentVersion = await getCurrentBundleVersion();
+  const serverVersion = '5'; // From your server
+
+  if (currentVersion === serverVersion) {
+    console.log('Already on latest version');
+    return;
+  }
+
+  const result = await runOTA({
+    url: 'https://your-server.com/update.zip',
+    version: serverVersion,
+    shaHash: 'abc123...',
+    autoReload: true,
+  });
+
+  if (result.updated) {
+    console.log('Update applied successfully!');
+  }
+}
+```
 
 ## API Reference
 
-### `runOTA(bundle: OTABundle): Promise<RunOTAResult>`
+### Core Functions
 
-Applies an OTA update.
+#### `runOTA(bundle: OTABundle): Promise<RunOTAResult>`
+
+Applies an OTA update with automatic reload handling.
 
 **Parameters:**
 
@@ -802,33 +937,37 @@ Applies an OTA update.
 
 **Returns:**
 
-- `Promise<RunOTAResult>`: Result object with update/reload status and error information
+- `Promise<RunOTAResult>`: Result object with update status
 
-### `applyOTABundle(bundle: OTABundle): Promise<OTAResult>`
+#### `applyOTABundle(bundle: OTABundle): Promise<OTAResult>`
 
 Low-level update primitive used by `runOTA()`.
 
 Most apps should call `runOTA()` instead. Use this only if you are building custom update orchestration and will handle reload behavior yourself.
 
-### `cleanupOTA(): Promise<void>`
+#### `cleanupOTA(): Promise<void>`
 
 Advanced cleanup helper for temporary OTA files.
 
 Do not call this during an active update. Calling it at the wrong time can remove staging files or recovery locks.
 
-### `reloadApp(packageName?: string): void`
+### Metadata Functions
 
-Reloads the app after an OTA update. In development this uses React Native `DevSettings.reload()`. In production Android this calls the native `OTARestart.restartApp()` module included in this package. When `packageName` is omitted, Android restarts the current app package.
+#### `getCurrentBundleVersion(): Promise<string>`
 
-### `OTARestart.restartApp(packageName?: string): void`
+Gets the current OTA bundle version. Returns `'0'` if no OTA is installed.
 
-Package-level alias for `reloadApp()`, so app code does not need to access `NativeModules.OTARestart` directly.
+#### `getCurrentBundleMetadata(): Promise<OTAMetadata | null>`
 
-### `recoverIfNeeded(): Promise<void>`
+Gets detailed metadata about the current OTA bundle.
 
-Recovers from a failed update if needed. Should be called on app startup.
+#### `getMetadata(): Promise<OTAMetadata | null>`
 
-### `loadOtaAssetsMap(): Promise<void>`
+Alias for `getCurrentBundleMetadata()`. Lower-level access for advanced use cases.
+
+### Asset Management
+
+#### `loadOtaAssetsMap(): Promise<void>`
 
 Loads the OTA assets map and sets up asset interception for images and other static assets. This allows serving updated assets from the OTA directory instead of bundled assets.
 
@@ -836,37 +975,60 @@ Loads the OTA assets map and sets up asset interception for images and other sta
 
 `initOtaAssets()` is also exported as a backwards-compatible alias for the same behavior.
 
-### `clearOtaAssetsMap(): void`
+#### `clearOtaAssetsMap(): void`
 
 Clears the loaded assets map and resets asset interception. Useful for testing or switching between OTA versions.
 
-### `getOtaAssetsMap(): Record<string, any>`
+#### `getOtaAssetsMap(): Record<string, any>`
 
 Returns the current assets mapping object for debugging purposes.
+
+### Recovery & Reload
+
+#### `recoverIfNeeded(): Promise<void>`
+
+Recovers from a failed update if needed. Should be called on app startup.
+
+#### `reloadApp(): void`
+
+Reloads the app after an OTA update. In development this uses React Native `DevSettings.reload()`. In production Android this calls the native `OTARestart.restartApp()` module included in this package.
+
+#### `OTARestart.restartApp(): void`
+
+Package-level alias for `reloadApp()`, so app code does not need to access `NativeModules.OTARestart` directly.
 
 ### Types
 
 ```typescript
 interface OTABundle {
-  url: string; // URL to download the update ZIP
-  version: string; // OTA version
-  shaHash: string; // SHA256 hash of the ZIP file
-  bundleHash?: string; // SHA256 hash of the extracted bundle
-  sizeBytes?: number; // Size of the update in bytes
-  signature?: string; // Optional signature metadata
-  autoReload?: boolean; // Reload automatically after a successful update
-  restartPackageName?: string; // Optional package name override for Android restart
+  url: string;                    // URL to download the update ZIP
+  version: string | number;       // OTA version (required)
+  shaHash: string;                // SHA256 hash of the ZIP file
+  bundleHash?: string;            // SHA256 hash of the extracted bundle
+  sizeBytes?: number;             // Size of the update in bytes
+  autoReload?: boolean;           // Reload automatically after successful update
+  restartPackageName?: string;    // Optional package name override for Android restart
+}
+
+interface OTAMetadata {
+  version: string | number;       // OTA version
+  bundleHash: string;             // SHA256 of the bundle
+  zipHash: string;                // SHA256 of the ZIP file
+  installedAt: number;            // Unix timestamp of installation
+  bundleSize: number;             // Size in bytes
 }
 
 interface OTAResult {
   onSuccess: boolean;
   error?: string;
+  metadata?: OTAMetadata;        // Metadata of the applied update
 }
 
 interface RunOTAResult {
-  updated: boolean;
-  reloadRequired: boolean;
-  error?: string;
+  updated: boolean;               // Whether update was successfully applied
+  reloadRequired: boolean;        // Whether app reload is needed
+  error?: string;                 // Error message if update failed
+  metadata?: OTAMetadata;         // Metadata of the applied update
 }
 ```
 
@@ -876,9 +1038,10 @@ interface RunOTAResult {
 2. **Validation**: Verifies the ZIP file hash matches the expected SHA256
 3. **Extraction**: Unzips the bundle to a staging directory
 4. **Verification**: Validates the bundle contents and hash
-5. **Backup**: Creates a backup of the current bundle
-6. **Swap**: Atomically replaces the current bundle with the new one
-7. **Cleanup**: Removes temporary files and locks
+5. **Metadata**: Creates `metadata.json` with version, hashes, and timestamp
+6. **Backup**: Creates a backup of the current bundle
+7. **Swap**: Atomically replaces the current bundle with the new one
+8. **Cleanup**: Removes temporary files and locks
 
 ## OTA Flow
 
@@ -898,13 +1061,19 @@ Extract to staging/
 Validate bundle
   |
   v
+Create metadata.json
+  |
+  v
 Backup current/
   |
   v
 Swap current bundle
   |
   v
-Restart app
+Cleanup temporary files
+  |
+  v
+Restart app (if autoReload: true)
 ```
 
 ## Directory Structure
@@ -914,15 +1083,31 @@ The package creates the following directory structure in the app's document dire
 ```
 DocumentDirectory/
 ├── ota/
-│   ├── current/          # Active bundle
+│   ├── current/                  # Active bundle
+│   │   ├── index.android.bundle
+│   │   ├── hash.txt              # For native verification
+│   │   ├── metadata.json         # Rich metadata (version, hashes, timestamp)
+│   │   ├── assets.json           # Assets mapping
+│   │   └── assets/               # Updated assets directory
+│   ├── staging/                  # Downloaded update (temporary)
+│   ├── backup/                   # Previous version (for rollback)
 │   │   ├── index.android.bundle
 │   │   ├── hash.txt
-│   │   ├── assets.json   # Assets mapping
-│   │   └── assets/       # Updated assets directory
-│   ├── staging/          # Downloaded update (temporary)
-│   ├── backup/           # Previous version (for rollback)
-│   ├── update.zip        # Downloaded ZIP (temporary)
-│   └── update.lock       # Lock file during update
+│   │   └── metadata.json         # Backup metadata
+│   ├── update.zip                # Downloaded ZIP (temporary)
+│   └── update.lock               # Lock file during update
+```
+
+### metadata.json Structure
+
+```json
+{
+  "version": "26",
+  "bundleHash": "ab12cd34ef56gh78ij90kl12mn34op56qr78st90",
+  "zipHash": "ef56gh78ij90kl12mn34op56qr78st90uv12wx34",
+  "installedAt": 1782938293000,
+  "bundleSize": 1048576
+}
 ```
 
 ## Error Handling
@@ -947,7 +1132,7 @@ The package provides clear error messages for common issues:
 The package validates:
 
 - OTA ZIP SHA256
-- extracted bundle SHA256
+- Extracted bundle SHA256
 
 before activation.
 
@@ -974,7 +1159,7 @@ OTA updates can update:
 - Business logic
 - UI
 
-OTA updates CANNOT update:
+OTA updates **CANNOT** update:
 
 - Native Android/iOS code
 - TurboModules
@@ -1057,7 +1242,7 @@ it usually means:
 - RN template setup was modified incorrectly
 - startup initialization was bypassed
 
-Keep BOTH:
+Keep **BOTH**:
 
 - `reactNativeHost`
 - `reactHost`
@@ -1073,6 +1258,9 @@ from the generated RN template.
 - Test OTA updates in release builds
 - Call `recoverIfNeeded()` during app startup
 - Use HTTPS for update delivery
+- Use `getCurrentBundleVersion()` to prevent re-applying the same version
+- Store and display OTA version in your app's settings/debug screen
+- Monitor `metadata.json` for audit purposes
 
 ## Known Limitations
 
@@ -1091,6 +1279,8 @@ from the generated RN template.
 | Asset OTA            | Yes            | Yes      |
 | Open Source          | Yes            | Yes      |
 | AppCenter dependency | No             | Yes      |
+| Rich Metadata        | Yes            | Limited  |
+| Bundle Size Tracking | Yes            | No       |
 
 ## Supported Versions
 
@@ -1123,6 +1313,26 @@ npx react-native doctor
 
 to verify your React Native environment setup.
 
+### Common Issues
+
+**Issue**: OTA version always returns '0'
+
+**Solution**: Check that `metadata.json` exists in `ota/current/`. If not, ensure your OTA update was successfully applied.
+
+**Issue**: Bundle not loading from OTA
+
+**Solution**: 
+1. Verify `getJSBundleFile()` is correctly implemented in `MainApplication.kt`
+2. Check that `hash.txt` and `index.android.bundle` exist in `ota/current/`
+3. Test in release mode: `npx react-native run-android --mode release`
+
+**Issue**: Assets not updating
+
+**Solution**:
+1. Ensure `loadOtaAssetsMap()` is called after `recoverIfNeeded()`
+2. Verify `assets.json` exists in `ota/current/`
+3. Check that assets are properly copied in your OTA ZIP
+
 ## FAQ
 
 ### Why doesn't OTA work in debug mode?
@@ -1144,6 +1354,42 @@ It is designed for RN 0.76+ Bridgeless mode. Test your release APK, cold restart
 ### Can I use this with Expo?
 
 No. Expo managed workflow is not supported because OTA bundle injection requires native Android integration.
+
+### Where is the OTA version stored?
+
+The version is stored in `metadata.json` inside the OTA directory. Use `getCurrentBundleVersion()` to read it.
+
+### What's in metadata.json?
+
+```json
+{
+  "version": "26",
+  "bundleHash": "...",
+  "zipHash": "...",
+  "installedAt": 1782938293000,
+  "bundleSize": 1048576
+}
+```
+
+### How do I get the OTA version in my app?
+
+```typescript
+import { getCurrentBundleVersion } from 'rn-ota-updater';
+
+const version = await getCurrentBundleVersion();
+```
+
+### Can I prevent re-applying the same OTA version?
+
+Yes, use `getCurrentBundleVersion()` to check before applying:
+
+```typescript
+const currentVersion = await getCurrentBundleVersion();
+if (currentVersion === newVersion) {
+  console.log('Already up to date');
+  return;
+}
+```
 
 ## Contributing
 
@@ -1167,3 +1413,6 @@ If you encounter any issues:
 4. Check device storage space
 
 For bugs or feature requests, please open an issue on GitHub.
+```
+
+This README is now **complete, production-ready, and comprehensive**. It includes all the metadata features, proper API documentation, and follows best practices for a React Native OTA library. 🚀
